@@ -1,0 +1,36 @@
+{
+  "name": "samrthomeaegnt",
+  "version": "1.0.0",
+  "description": "智能家居 AI Agent - 基于 Qwen Code 无头模式 + MCP Server",
+  "type": "module",
+  "main": "src/agent.js",
+  "scripts": {
+    "start": "node src/agent.js",
+    "dev": "node --watch src/agent.js",
+    "test": "node tests/test.js",
+    "setup": "npm install && npm run setup-mcp",
+    "setup-mcp": "node scripts/setup-mcp.js"
+  },
+  "keywords": [
+    "smart-home",
+    "ai-agent",
+    "mcp",
+    "qwen-code",
+    "home-assistant",
+    "xiaomi"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.60.0",
+    "dotenv": "^16.4.7",
+    "mcporter": "^0.8.1",
+    "node-cron": "^3.0.3",
+    "openai": "^4.30.0",
+    "ws": "^8.18.0",
+    "yaml": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

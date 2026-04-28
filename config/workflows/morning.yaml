@@ -1,0 +1,98 @@
+# SmartHomeClaw 工作流配置
+# 支持步骤类型: decide / skill / mcp / condition / parallel / notify / wait
+
+workflows:
+
+  # ─── 示例1：早晨例行工作流 ────────────────────────────────────────────────
+  - id: "morning_workflow"
+    name: "早晨例行任务"
+    steps:
+      - id: "get_weather"
+        type: "skill"
+        skill: "weather"
+        params:
+          city: "杭州"
+        output: "weather"
+
+      - id: "get_news"
+        type: "skill"
+        skill: "baidu-search"
+        params:
+          query: "今天新闻"
+        output: "news"
+
+      - id: "notify_user"
+        type: "notify"
+        message: |
+          🌅 早安！以下是今日简报：
+
+          🌤 天气：${weather}
+
+          📰 新闻摘要：
+          ${news}
+
+  # ─── 示例2：智能空调控制（条件分支）──────────────────────────────────────
+  - id: "ac_auto_control"
+    name: "智能空调自动控制"
+    steps:
+      - id: "query_temp"
+        type: "mcp"
+        tool: "mcp_ureal-mcp_smarthome_query_device_status"
+        params:
+          sn: "G042408000066"
+          did: 1002
+        output: "ac_status"
+
+      - id: "check_and_control"
+        type: "condition"
+        condition: "{{ac_status.QueryRoomTemp}} > 26"
+        if_true:
+          - id: "turn_on_ac"
+            type: "mcp"
+            tool: "mcp_ureal-mcp_smarthome_control_device"
+            params:
+              sn: "G042408000066"
+              did: 1002
+              node: "Switch"
+              value: "on"
+          - id: "notify_ac_on"
+            type: "notify"
+            message: "🌡️ 室温 ${ac_status.QueryRoomTemp}°C 过高，已自动开启空调。"
+        if_false:
+          - id: "notify_ac_ok"
+            type: "notify"
+            message: "✅ 室温 ${ac_status.QueryRoomTemp}°C 正常，空调无需开启。"
+
+  # ─── 示例3：并行设备巡检 ─────────────────────────────────────────────────
+  - id: "device_check"
+    name: "设备状态巡检"
+    steps:
+      - id: "parallel_query"
+        type: "parallel"
+        steps:
+          - id: "check_ac"
+            type: "mcp"
+            tool: "mcp_ureal-mcp_smarthome_query_device_status"
+            params:
+              sn: "G042408000066"
+              did: 1002
+            output: "ac_status"
+          - id: "check_light"
+            type: "mcp"
+            tool: "mcp_ureal-mcp_smarthome_query_device_status"
+            params:
+              sn: "G042408000066"
+              did: 1012
+            output: "light_status"
+
+      - id: "report"
+        type: "decide"
+        prompt: |
+          请用一段简洁的中文汇总以下设备状态：
+          空调状态：${ac_status}
+          灯光状态：${light_status}
+        output: "report"
+
+      - id: "notify_report"
+        type: "notify"
+        message: "📊 设备巡检报告：\n\n${report}"

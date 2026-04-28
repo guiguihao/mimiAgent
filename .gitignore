@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+
+# Workspace（AI 生成的文件，不纳入版本控制）
+workspace/
+
+# Storage & Runtime
+sessions/*
+
+# Logs
+*.log
+npm-debug.log*
+
+*_back*
+
+# OS
+.DS_Store
+Thumbs.db
+mcp/ureal_mcp/smarthome_logs_*
+mcp/ureal_mcp/smarthome_state.db
+*__pycache__*

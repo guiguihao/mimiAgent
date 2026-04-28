@@ -1,0 +1,64 @@
+# Cron 定时任务配置
+
+cron:
+  tasks:
+    - id: "morning_routine"
+      name: "早晨模式"
+      cron: "0 7 * * *"
+      enabled: true
+      prompt: "现在是早上7点，用户起床了，现在天气怎么样？建议, 根据天气情况和室内情况，给用户穿衣建议和行程建议"
+
+    - id: "morning_news"
+      name: "新闻早报"
+      cron: "0 8 * * *"
+      enabled: true
+      prompt: "今天早上的新闻，20条，内容涵盖科技、财经和民生等领域 (不要表格)"
+
+    - id: "stock_news"
+      name: "股市早报"
+      cron: "0 9 * * *"
+      enabled: true
+      prompt: "股市早报，20条内容， 并附带投资建议 (不要表格)"
+    
+    - id: "stock_noon_news"
+      name: "股市午报"
+      cron: "0 12 * * *"
+      enabled: true
+      prompt: "股市午报，20条内容， 并附带投资建议 (不要表格)"
+
+    - id: "stock_evening_news"
+      name: "股市晚报"
+      cron: "18 18 * * *"
+      enabled: true
+      prompt: "股市晚报，20条内容， 并附带投资建议 (不要表格)"
+
+
+    - id: "night_news"
+      name: "夜间新闻"
+      cron: "20 20 * * *"
+      enabled: true
+      prompt: "夜间新闻，20条内容，内容涵盖科技、财经和民生等领域 (不要表格)"
+    
+    - id: "one_idkey_signin"
+      name: "one_idkey_signin,签到,拿积分"
+      cron: "6 9 * * *"
+      enabled: true
+      prompt: "agent-browser打开https://one.idkey.cc,寻找并点击签到按钮，完成之后关闭浏览器,并把结果反馈给我"
+    
+    # - id: "night_routine"
+    #   name: "夜间模式"
+    #   cron: "0 23 * * *"
+    #   enabled: true
+    #   prompt: "现在是晚上11点，用户准备睡觉，执行夜间模式"
+      
+    # - id: "temp_check"
+    #   name: "温度检查"
+    #   cron: "*/30 * * * *"
+    #   enabled: true
+    #   prompt: "检查当前温度"
+      
+    # - id: "security_check"
+    #   name: "安全巡检"
+    #   cron: "0 */2 * * *"
+    #   enabled: false
+    #   prompt: "执行安全巡检，检查门窗和安防设备"

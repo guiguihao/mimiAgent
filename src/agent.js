@@ -1,0 +1,413 @@
+import fs from 'fs/promises';
+import path from 'path';
+import yaml from 'yaml';
+import dotenv from 'dotenv';
+import CoreAgent from './services/coreagent.js';
+import Scheduler from './services/scheduler.js';
+import Heartbeat from './services/heartbeat.js';
+import MemoryService from './services/memory.js';
+import MessengerBridge from './services/messenger.js';
+import SkillService from './services/skill.js';
+import WorkflowService from './services/workflow.js';
+import FeishuService from '../plugin/feishu.js';
+import MCPorterService from '../plugin/mcporter.js';
+
+
+// 加载环境变量
+dotenv.config();
+
+/**
+ * SmartHomeClaw Agent 主入口
+ * 基于 Qwen Code 无头模式驱动的智能家居 AI Agent
+ */
+class SmartHomeAgent {
+  constructor() {
+    this.config = null;
+    this.agent = null;
+    this.scheduler = null;
+    this.heartbeat = null;
+    this.memory = null;
+    this.messenger = null; // 消息桥接器
+    this.skill = null;     // 技能服务
+    this.workflow = null;  // 工作流服务
+    this.feishu = null;
+  }
+
+  /**
+   * 初始化 Agent
+   */
+  async init() {
+    console.log('[Agent] Initializing SmartHomeClaw...');
+
+    // 1. 加载配置
+    await this.loadConfig();
+
+    // 2. 初始化记忆服务
+    this.memory = new MemoryService(this.config.memory);
+    await this.memory.init();
+
+    // 3. 初始化 CoreAgent
+    const modelConfig = this._buildModelConfig();
+    this.agent = new CoreAgent(modelConfig);
+    this.agent.setMemory(this.memory);
+    await this.agent.init();
+
+    // 设置工作目录
+    const workspaceDir = path.resolve(process.cwd(), this.config.agent?.workspace || './workspace');
+    await fs.mkdir(workspaceDir, { recursive: true });
+    this.agent.setWorkspace(workspaceDir);
+    console.log(`[Agent] Workspace: ${workspaceDir}`);
+
+    // 4. 初始化技能服务
+    this.skill = new SkillService(this.config.agent?.skills);
+    await this.skill.init();
+    this.agent.setSkill(this.skill);
+
+    // 4. 初始化调度器
+    this.scheduler = new Scheduler();
+    this.agent.setScheduler(this.scheduler);
+
+    // 5. 初始化心跳
+    this.heartbeat = new Heartbeat(this.agent, this.config.heartbeat);
+    this.agent.setHeartbeat(this.heartbeat);
+
+    // 设置 Cron 任务执行回调
+    this.agent.setOnCronTaskExecute(async (prompt, taskConfig) => {
+      console.log(`[Agent] Cron triggered: ${taskConfig.name}`);
+      const res = await this.thinkAndAct(prompt);
+      console.log(`Cron triggered: ${taskConfig.name}, result: ${JSON.stringify(res)}`);
+
+
+    });
+
+    // 6. 初始化消息桥接器
+    this.messenger = new MessengerBridge();
+
+    // 7. 初始化飞书服务
+    if (this.config.plugins?.feishu?.enabled) {
+      this.feishu = new FeishuService(this.config.plugins.feishu, this.agent);
+      this.messenger.register('feishu', this.feishu);
+    }
+
+    // 关联心跳警报到消息广播
+    if (this.heartbeat) {
+      this.heartbeat.setOnWarning(async (message, result) => {
+        console.log(`[Agent] Heartbeat warning: ${message}`);
+        await this.messenger.broadcast(`⚠️ **系统巡检告警**\n\n${message}`);
+      });
+    }
+
+    // 7. 初始化 MCPorter 服务
+    if (this.config.plugins?.mcporter?.enabled) {
+      this.mcporter = new MCPorterService(this.config.plugins.mcporter, this.agent);
+    }
+
+    // 8. 初始化工作流服务
+    this.workflow = new WorkflowService(this.config.workflow || {});
+    await this.workflow.init();
+    this.workflow.setAgent(this.agent);
+    this.workflow.setSkillService(this.skill);
+    // MCPorter 在 start() 阶段才完全就绪，broadcast 也在 start() 后注入
+    this.agent.setWorkflow(this.workflow);
+
+    console.log('[Agent] Initialized');
+  }
+
+  /**
+   * 启动 Agent
+   */
+  async start() {
+    console.log('[Agent] Starting SmartHomeClaw...');
+
+    // 1. 注册 Cron 任务
+    await this.registerCronTasks();
+
+    // 2. 启动心跳
+    this.heartbeat.start();
+
+    // 3. 启动调度器
+    this.scheduler.startAll();
+
+    // 4. 启动飞书服务
+    if (this.feishu) {
+      await this.feishu.start();
+    }
+
+    // 5. 启动 MCPorter 服务
+    if (this.mcporter) {
+      await this.mcporter.start();
+      // MCPorter 就绪后注入到工作流
+      if (this.workflow) {
+        this.workflow.setMCPService(this.mcporter);
+      }
+    }
+
+    // 6. 注入 broadcast 函数到工作流（飞书就绪后）
+    if (this.workflow && this.messenger) {
+      this.workflow.setBroadcast(async (msg) => {
+        await this.messenger.broadcast(msg);
+      });
+    }
+
+    console.log('[Agent] SmartHomeClaw is running...');
+    console.log('[Agent] Press Ctrl+C to stop');
+  }
+
+  /**
+   * 停止 Agent
+   */
+  async stop() {
+    console.log('[Agent] Stopping SmartHomeClaw...');
+
+    this.heartbeat.stop();
+    this.scheduler.stopAll();
+
+    // 停止飞书服务
+    if (this.feishu) {
+      await this.feishu.stop();
+    }
+
+    // 停止 MCPorter 服务
+    if (this.mcporter) {
+      await this.mcporter.stop();
+    }
+
+    console.log('[Agent] Stopped');
+  }
+
+  /**
+   * 加载配置文件
+   */
+  async loadConfig() {
+    try {
+      const configDir = path.join(process.cwd(), 'config');
+
+      // 并行加载所有配置文件
+      const [agentConfig, heartbeatConfig, cronConfig, pluginConfig] = await Promise.all([
+        this.loadYaml(path.join(configDir, 'agent.yaml')),
+        this.loadYaml(path.join(configDir, 'heartbeat.yaml')),
+        this.loadYaml(path.join(configDir, 'cron.yaml')),
+        this.loadYaml(path.join(configDir, 'plugin.yaml')),
+      ]);
+
+      // 以 agent.yaml 为基础，合并其他配置
+      this.config = {
+        ...(agentConfig || {}),
+        heartbeat: heartbeatConfig?.heartbeat || {},
+        cron: cronConfig?.cron || {},
+        plugins: pluginConfig?.plugins || {},
+      };
+
+      console.log('[Agent] Config loaded (merged)');
+    } catch (error) {
+      console.error('[Agent] Config load error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 从配置中构建模型配置
+   * 与 Python 版 load_model_from_config 对齐。
+   *
+   * default 格式为 "{provider}/{model}" 或纯模型名 "{model}"。
+   * provider 在 providers 数组中按 name 字段匹配。
+   * apiKey 通过 api_key_env 从环境变量读取。
+   */
+  _buildModelConfig() {
+    const models = this.config.models || {};
+    const defaultVal = models.default || 'gpt-4o';
+    const providers = models.providers || [];
+
+    // 分离 provider 前缀与模型名
+    if (defaultVal.includes('/')) {
+      const targetProvider = defaultVal.slice(0, defaultVal.indexOf('/'));
+      const targetModel = defaultVal.slice(defaultVal.indexOf('/') + 1);
+      var providerName = targetProvider;
+      var modelName = targetModel;
+    } else {
+      var providerName = null;
+      var modelName = defaultVal;
+    }
+
+    // 在 providers 数组中查找匹配的 provider
+    let matched = null;
+    let matchedModelConfig = null;
+    for (const provider of providers) {
+      if (providerName) {
+        if (provider.name === providerName) {
+          matched = provider;
+          break;
+        }
+      } else {
+        // 旧格式兼容：models 为字符串数组
+        if (provider.models && provider.models.includes(modelName)) {
+          matched = provider;
+          break;
+        }
+      }
+    }
+
+    // 在 matched provider 的 models 中查找具体的模型配置
+    if (matched && matched.models) {
+      for (const m of matched.models) {
+        if (typeof m === 'string' && m === modelName) {
+          matchedModelConfig = { id: m, thinking: false, stream: false };
+          break;
+        } else if (typeof m === 'object' && m.id === modelName) {
+          matchedModelConfig = m;
+          break;
+        }
+      }
+    }
+
+    // 未找到则 fallback 到第一个 provider 或默认值
+    if (!matched) {
+      if (providers.length > 0) {
+        matched = providers[0];
+        // 尝试从第一个 provider 中取第一个模型
+        const firstModel = matched.models?.[0];
+        if (typeof firstModel === 'object') {
+          matchedModelConfig = firstModel;
+          modelName = firstModel.id;
+        } else if (typeof firstModel === 'string') {
+          matchedModelConfig = { id: firstModel, thinking: false, stream: false };
+          modelName = firstModel;
+        }
+      } else {
+        matched = {
+          name: 'openai',
+          base_url: 'https://api.openai.com/v1',
+          api_key_env: 'OPENAI_API_KEY',
+          models: [{ id: 'gpt-4o', thinking: false, stream: false }],
+        };
+        matchedModelConfig = matched.models[0];
+        modelName = 'gpt-4o';
+      }
+    }
+
+    // 若只找到 provider 但没匹配到具体 model，取第一个
+    if (!matchedModelConfig && matched?.models?.length > 0) {
+      const first = matched.models[0];
+      if (typeof first === 'object') {
+        matchedModelConfig = first;
+        modelName = first.id;
+      } else {
+        matchedModelConfig = { id: first, thinking: false, stream: false };
+        modelName = first;
+      }
+    }
+
+    // 从环境变量读取 API Key
+    const apiKeyEnv = matched.api_key_env || 'OPENAI_API_KEY';
+    const apiKey = process.env[apiKeyEnv] || '';
+
+    console.log(`[Agent] Using model: ${modelName} @ provider: ${matched.name}, thinking=${matchedModelConfig.thinking}, stream=${matchedModelConfig.stream}`);
+
+    // 获取系统提示词
+    const systemPrompt = this.config.agent?.system_prompt;
+
+    return {
+      name: this.config.agent?.name || 'SmartHomeClaw',
+      model: modelName,
+      baseUrl: matched.base_url,
+      apiKey: apiKey,
+      thinking: matchedModelConfig.thinking || false,
+      stream: matchedModelConfig.stream || false,
+      systemPrompt: systemPrompt
+    };
+  }
+
+  /**
+   * 注册定时任务
+   */
+  async registerCronTasks() {
+    const tasks = this.config.cron.tasks || [];
+
+    this.scheduler.registerTasks(tasks, async (prompt, taskConfig) => {
+      console.log(`[Agent] Static Cron triggered: ${taskConfig.name}`);
+      const result = await this.thinkAndAct(prompt);
+      const reply = result?.reply || result?.response;
+
+      if (reply && reply.trim()) {
+        console.log(`[Agent] Broadcasting static cron reply to Feishu (target: ${this.feishu?.notificationChatId || 'None'})`);
+        await this.messenger.broadcast(`⏰ **定时任务执行: ${taskConfig.name}**\n\n${reply}`);
+      } else {
+        console.log(`[Agent] Static Cron for ${taskConfig.name} produced no reply.`);
+      }
+    });
+  }
+
+  /**
+   * AI 思考并执行
+   * @param {string} prompt - 问题/指令
+   * @param {object} options - 可选参数
+   * @returns {object} 决策结果
+   */
+  async thinkAndAct(prompt, options = {}) {
+    try {
+      console.log(`[Agent] Thinking: ${prompt}`);
+
+      if (!this.agent) {
+        throw new Error('Agent not initialized');
+      }
+
+      const decision = await this.agent.decide(prompt, options);
+      console.log('[Agent] Decision:', decision);
+
+      return decision;
+    } catch (error) {
+      console.error('[Agent] ThinkAndAct error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 加载 YAML 文件
+   * @param {string} filePath - 文件路径
+   * @returns {object} 配置对象
+   */
+  async loadYaml(filePath) {
+    try {
+      let content = await fs.readFile(filePath, 'utf-8');
+
+      // 替换环境变量 ${VAR} 或 $VAR
+      content = content.replace(/\$\{(\w+)\}/g, (match, key) => {
+        return process.env[key] || match;
+      }).replace(/\$(\w+)/g, (match, key) => {
+        return process.env[key] || match;
+      });
+
+      return yaml.parse(content) || {};
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.warn(`[Agent] Config file not found: ${filePath}`);
+        return {};
+      }
+      throw error;
+    }
+  }
+}
+
+// 启动入口
+const agent = new SmartHomeAgent();
+
+// 优雅退出处理
+process.on('SIGINT', async () => {
+  await agent.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  await agent.stop();
+  process.exit(0);
+});
+
+// 启动
+agent.init()
+  .then(() => agent.start())
+  .catch((error) => {
+    console.error('[Agent] Failed to start:', error.message);
+    process.exit(1);
+  });
+
+export default SmartHomeAgent;

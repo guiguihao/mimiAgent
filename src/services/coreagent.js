@@ -763,8 +763,24 @@ class CoreAgent {
     try {
       switch (toolName) {
         case 'cmd_exec':
-          const { stdout, stderr } = await execAsync(args.command, {
+          let finalCommand = args.command;
+
+          // 只对 browser-use open 子命令注入 --headed（有头模式）
+          // 其他子命令（state/eval/click/cookies 等）不注入，避免脱离已有 daemon
+          if (finalCommand.startsWith('browser-use ')) {
+            const isOpenCmd = /^browser-use\s+(--\S+\s+)*open(\s|$)/.test(finalCommand);
+            if (isOpenCmd && !finalCommand.includes('--headed') &&
+                process.env.BROWSER_USE_HEADLESS === 'false') {
+              // 先关闭可能残留的 headless daemon，确保新 daemon 以 headed 模式启动
+              finalCommand = `browser-use close >/dev/null 2>&1; ` + 
+                             finalCommand.replace('browser-use ', 'browser-use --headed ');
+            }
+          }
+
+          console.log(`[CoreAgent] cmd_exec 实际执行: ${finalCommand.substring(0, 120)}`);
+          const { stdout, stderr } = await execAsync(finalCommand, {
             cwd: args.cwd || process.cwd(),
+            env: { ...process.env, ...args.env }, // 显式透传当前环境变量
             timeout: args.timeout || 30000,
             maxBuffer: 1024 * 1024 // 1MB
           });
@@ -870,6 +886,15 @@ class CoreAgent {
     if (history.length <= maxLen) return history;
 
     let trimmed = history.slice(history.length - maxLen);
+
+    // ── 新增：总字符数限制，防止上下文过长 ──
+    const MAX_TOTAL_CHARS = 60000; 
+    let currentTotal = trimmed.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
+    
+    while (currentTotal > MAX_TOTAL_CHARS && trimmed.length > 2) {
+      const removed = trimmed.shift(); // 移除最旧的消息
+      currentTotal -= (removed.content?.length || 0);
+    }
 
     // 检查开头是否有孤立的 tool_result（对应的 tool_call 被截掉了）
     const orphanStart = trimmed.findIndex(
@@ -1008,6 +1033,7 @@ class CoreAgent {
         messages: messages,
         tools: tools.length > 0 ? tools : undefined,
         temperature: 0.7,
+        max_tokens: 4096, // 显式设置最大输出，防止某些 API 在输入过长时自动计算产生负值
       };
 
       // 思考模式：构建 reasoning 参数
@@ -1069,7 +1095,14 @@ class CoreAgent {
           }
 
           const result = await this._handleToolCall(tc.function.name, args);
-          const displayResult = typeof result === 'object' ? JSON.stringify(result) : String(result);
+          let displayResult = typeof result === 'object' ? JSON.stringify(result) : String(result);
+          
+          // 限制工具输出长度，防止撑爆上下文 (约 20,000 字符)
+          if (displayResult.length > 20000) {
+            console.log(`[CoreAgent] 工具 ${tc.function.name} 输出过长 (${displayResult.length})，已截断`);
+            displayResult = displayResult.substring(0, 20000) + "\n\n(内容过长，已截断...)";
+          }
+
           console.log(`[CoreAgent] 工具: ${tc.function.name} → ${displayResult.substring(0, 80)}`);
 
           const toolResult = { role: 'tool', tool_call_id: tc.id, content: displayResult };

@@ -1,5 +1,0 @@
-{
-  "profile": "./workspace/browser-profile",
-  "headed": false,
-  "default-timeout": 30000
-}

@@ -14,3 +14,6 @@ qrcode[pil]>=8.2
 
 # Dev
 setuptools>=80.9.0
+
+# LLM Browser Automation
+browser-use

@@ -6,7 +6,7 @@ cron:
       name: "早晨模式"
       cron: "0 7 * * *"
       enabled: true
-      prompt: "现在是早上7点，用户起床了，现在天气怎么样？建议, 根据天气情况和室内情况，给用户穿衣建议和行程建议"
+      prompt: "现在是早上7点，用户起床了，现在天气怎么样？建议, 根据天气情况和室内情况，给用户穿衣建议和行程建议 (不要表格)"
 
     - id: "morning_news"
       name: "新闻早报"
@@ -41,9 +41,9 @@ cron:
     
     - id: "one_idkey_signin"
       name: "one_idkey_signin,签到,拿积分"
-      cron: "6 9 * * *"
+      cron: "13 9 * * *"
       enabled: true
-      prompt: "agent-browser打开https://one.idkey.cc,寻找并点击签到按钮，完成之后关闭浏览器,并把结果反馈给我"
+      prompt: "browser-user打开https://one.idkey.cc,寻找并点击签到按钮，完成之后关闭浏览器,并把结果反馈给我"
     
     # - id: "night_routine"
     #   name: "夜间模式"

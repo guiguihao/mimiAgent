@@ -44,13 +44,20 @@ memory:
 
 # 模型配置 
 models:
-  default: "nvidia/openai/gpt-oss-120b"
+  default: "huoshan/GLM-5.1"
   providers:
     - name: nvidia
       base_url: "https://integrate.api.nvidia.com/v1"
       api_key_env: "NVIDIA_API_KEY"
       models:
         - id: "openai/gpt-oss-120b"
+          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
+          stream: true      # 是否开启流式输出
+    - name: huoshan
+      base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
+      api_key_env: "VOLCENGINE_API_KEY"
+      models:
+        - id: "GLM-5.1"
           thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
           stream: true      # 是否开启流式输出
 

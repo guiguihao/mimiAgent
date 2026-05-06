@@ -202,6 +202,12 @@ heartbeat:
 
 ---
 
+## 🔑 飞书权限批量导入
+
+飞书应用所需的全部权限范围（`tenant` + `user`）已整理为标准 JSON 格式，可直接在飞书开放平台批量导入。
+
+查看权限清单：[`other/feishu.txt`](other/feishu.txt)
+
 ## 🤝 扩展开发
 
 - **添加技能**：在 `skills/` 下新建目录，包含 `SKILL.md` 和执行脚本。

@@ -1,4 +1,4 @@
-# SmartHomeClaw 工作流配置
+# mimi 工作流配置
 # 支持步骤类型: decide / skill / mcp / condition / parallel / notify / wait
 
 workflows:

@@ -1,15 +1,16 @@
-# SmartHomeClaw Agent
+# zhuzhu Agent
 
-基于 Node.js 开发的智能家居 AI 管家，由先进的语言模型驱动，具备自主感知、决策、记忆、工作流编排及多端通信能力。
+基于 Node.js 开发的通用智能 AI 助手，由先进的语言模型驱动，具备自主决策、长期记忆、工作流编排、定时任务与多端通信能力。
 
 ## 🌟 核心特性
 
-- **🔌 内置 MCP 支持**：内置悠瑞智能家居 MCP、小度 DuerOS MCP、米家 MCP，可无缝扩展任意 MCP Server。支持每个 Server 独立启用/禁用，配置文件支持 `${ENV_VAR}` 环境变量引用。
+- **🤖 通用 AI 助手**：支持日常问答、网页自动化、信息搜索、文件处理等多种通用任务。
+- **🔌 内置 MCP 支持**：可无缝扩展任意 MCP Server，配置文件支持 `${ENV_VAR}` 环境变量引用，每个 Server 独立启用/禁用。
 - **🚀 多平台接入**：通过 `MessengerBridge` 实现飞书（Feishu）等平台的无缝集成，支持流式输出与消息去重。
 - **🧩 技能系统 (Skills)**：动态加载 `skills/` 目录下的技能，自动映射为 AI 可直接调用的顶级工具。
-  - **知识技能（MD Skill）**：标准 `SKILL.md` 格式（带 YAML 前置参数），AI 读取手册后通过 `cmd_exec` 执行脚本。
-  - **内置技能**：`baidu-search`（百度 AI 搜索）、`weather`（天气查询）、`agent-browser`（自动化浏览器）。
-- **🔄 工作流引擎 (Workflow)**：AI 可自主编排、持久化管理工作流，工作流定义保存在 `config/workflows/` 目录下的 YAML 文件中，支持：
+  - **知识技能（MD Skill）**：标准 `SKILL.md` 格式（带 YAML 前置参数），AI 读取手册后通过 `cmd_exec` 执行命令。
+  - **内置技能**：`baidu-search`（百度 AI 搜索）、`browser-use`（网页自动化浏览器）。
+- **🔄 工作流引擎 (Workflow)**：AI 可自主编排、持久化管理工作流，定义保存在 `config/workflows/` 目录的 YAML 文件中，支持：
   - `decide`：AI 自主决策步骤
   - `skill`：直接调用技能
   - `mcp`：直接调用 MCP 工具
@@ -18,11 +19,12 @@
   - `notify`：广播消息到飞书
   - `wait`：等待指定时间
   - 步骤间变量传递（`${varName}` 模板）
-- **🗂️ 工作目录 (Workspace)**：AI 生成的文件（图片、报告、数据）统一保存到 `workspace/` 目录，路径可在 `agent.yaml` 中配置。
-- **🧠 长期记忆 (Memory)**：基于本地 Markdown 的结构化记忆。
-  - `USER_PROFILE.md`：用户偏好与习惯
-  - `FACTS.md`：重要事实记录
-  - `ENVIRONMENT.md`：自动同步的环境快照（天气、设备状态）
+- **🗂️ 工作目录 (Workspace)**：AI 生成的文件（图片、报告、数据）统一保存到 `workspace/` 目录。
+- **🧠 长期记忆 (Memory)**：基于本地 Markdown 的结构化记忆，跨重启持久化。
+  - `USER_PROFILE.md`：用户偏好与画像
+  - `KNOWLEDGE.md`：长期知识库与经验积累
+  - `FACTS.md`：重要事实与关键数据记录
+  - `CONTEXT.md`：当前对话背景与即时上下文
 - **💓 智能巡检 (Heartbeat)**：每个检查项独立定时，支持全局默认间隔与单项自定义间隔。
 - **📅 定时任务 (Cron)**：灵活的定时任务管理，支持 AI 自主增删改查。
 
@@ -39,15 +41,14 @@
 │   ├── plugin.yaml         # 插件参数（飞书、MCPorter 等）
 │   ├── mcporter.json       # MCP Server 配置（支持 enabled 和 ${ENV_VAR}）
 │   └── workflows/          # 工作流定义目录（每个 .yaml 文件独立加载）
-│       └── morning.yaml    # 示例工作流
 ├── memory/                 # 长期记忆存储（Markdown）
 │   ├── USER_PROFILE.md
-│   ├── HABITS.md
+│   ├── KNOWLEDGE.md
 │   ├── FACTS.md
-│   └── ENVIRONMENT.md
+│   └── CONTEXT.md
 ├── skills/                 # 技能库
 │   ├── baidu-search/       # 百度 AI 搜索技能
-│   └── weather/            # 天气查询技能
+│   └── browser-use/        # 网页自动化浏览器技能
 ├── plugin/
 │   ├── feishu.js           # 飞书平台适配器
 │   └── mcporter.js         # MCP Server 客户端
@@ -73,7 +74,7 @@
 ### 1. 安装依赖
 ```bash
 npm install
-pip install -r requirements.txt  # 技能脚本依赖内置mcp依赖
+pip install -r requirements.txt  # 技能脚本依赖
 ```
 
 ### 2. 配置环境变量
@@ -83,10 +84,13 @@ NVIDIA_API_KEY=your_key       # 语言模型 API Key
 FEISHU_APP_ID=cli_xxxxxxxx    # 飞书应用 ID
 FEISHU_APP_SECRET=xxxxxxxx    # 飞书应用密钥
 BAIDU_API_KEY=xxxx            # 百度 AI 搜索 Key
-XIAODU_ACCESS_TOKEN=xxxx      # 小度 DuerOS Token（可选）
+
+# 浏览器自动化（可选）
+BROWSER_USE_HEADLESS=false                      # false = 有头模式
+BROWSER_USE_USER_DATA_DIR=./workspace/browser-use-config  # 登录态持久化目录
 ```
 
-### 3. 配置 MCP Server
+### 3. 配置 MCP Server（可选）
 编辑 `config/mcporter.json`，支持每个 Server 独立控制和 `.env` 变量引用：
 ```json
 {
@@ -127,43 +131,6 @@ npm start      # 生产模式
 
 > **AI 可以自主编排工作流**：告诉 AI 你需要的流程，它会调用 `workflow_save` 生成 YAML 文件并立即可用。
 
-### 手动定义工作流
-
-```yaml
-# config/workflows/my_workflow.yaml
-workflows:
-  - id: "evening_check"
-    name: "晚间设备检查"
-    steps:
-      - id: "query_ac"
-        type: "mcp"
-        tool: "mcp_ureal-mcp_smarthome_query_device_status"
-        params:
-          sn: "G042408000066"
-          did: 1002
-        output: "ac_status"
-
-      - id: "auto_off"
-        type: "condition"
-        condition: "{{ac_status.Switch}} == 'on'"
-        if_true:
-          - id: "turn_off"
-            type: "mcp"
-            tool: "mcp_ureal-mcp_smarthome_control_device"
-            params:
-              sn: "G042408000066"
-              did: 1002
-              node: "Switch"
-              value: "off"
-          - id: "notify"
-            type: "notify"
-            message: "🌙 晚间巡检：空调已自动关闭。"
-        if_false:
-          - id: "notify_ok"
-            type: "notify"
-            message: "✅ 晚间巡检：设备状态正常。"
-```
-
 ### 步骤类型速查
 
 | type | 说明 | 关键字段 |
@@ -188,13 +155,12 @@ workflows:
 | `/compress` 或 `/压缩` | 压缩会话历史，节省 Token |
 
 ### AI 能力示例
+- `"帮我搜索今天的科技新闻"`
+- `"打开 https://example.com 查看内容"`（触发 browser-use 技能）
 - `"列出当前所有工作流"`
-- `"帮我创建一个晚间关灯工作流"`（AI 自动调用 `workflow_save`）
-- `"执行工作流 morning_workflow"`
-- `"查看 morning_workflow 的详细步骤"`
-- `"列出当前所有技能"`
 - `"创建一个每天早上 8 点发送新闻的定时任务"`
-- `"查询所有设备状态"`
+- `"帮我创建一个定期备份工作流"`（AI 自动调用 `workflow_save`）
+- `"把我的偏好记录到记忆中"`
 
 ---
 
@@ -206,20 +172,33 @@ workflows:
 # config/heartbeat.yaml
 heartbeat:
   enabled: true
-  interval: "*/10 * * * *"   # 全局默认：每10分钟
+  interval: "*/30 * * * *"   # 全局默认：每30分钟
 
   checks:
-    - name: "环境检查"
-      interval: "*/15 * * * *"   # 单独设置（优先级更高）：每15分钟
-      prompt: "查询杭州的天气，检查当前智能设备状态数据，并使用 memory_update_environment 更新环境状态记忆。"
+    - name: "日常状态巡检"
+      interval: "0 9 * * *"    # 每天早9点
+      prompt: "检查今天的待办事项，汇报当前任务状态。"
 
-    - name: "安全巡检"
-      # 未设置 interval，使用全局 */10 * * * *
-      prompt: "安全检查：门窗、烟雾、燃气等是否正常？"
+    - name: "定期知识整理"
+      interval: "0 20 * * *"   # 每天晚8点
+      prompt: "回顾今天的对话，将重要信息整理写入知识库（memory_update_knowledge）。"
 ```
 
 - 每个 check 的 `interval` 字段**可选**，未设置时使用顶层 `interval`。
 - 发现异常时，AI 设置 `"is_warning": true`，系统自动推送告警到飞书。
+
+---
+
+## 🌐 网页自动化 (browser-use)
+
+内置 `browser-use` 技能，支持网页访问、表单填写、内容提取等操作。
+
+**登录持久化**：通过 `BROWSER_USE_USER_DATA_DIR` 指定专用目录，Cookie 与登录态跨重启自动保存，详见 [`skills/browser-use/必读.md`](skills/browser-use/必读.md)。
+
+```bash
+# AI 自动以有头模式（可见窗口）打开
+"打开 https://github.com 查找热门项目"
+```
 
 ---
 

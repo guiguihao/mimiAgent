@@ -1,6 +1,6 @@
 /**
- * CoreAgent - SmartHomeClaw 核心 Agent 引擎
- * 基于 guiguihao/SmartHomeClaw/src/core/agent.py 设计
+ * CoreAgent - mimi 核心 Agent 引擎
+ * 基于 guiguihao/mimi/src/core/agent.py 设计
  * 支持工具调用循环、记忆管理、定时任务、心跳巡检
  */
 import fs from 'fs/promises';
@@ -14,7 +14,7 @@ const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant named "{name}".`;
 
 class CoreAgent {
   constructor(modelConfig = {}) {
-    this.name = modelConfig.name || 'SmartHomeClaw';
+    this.name = modelConfig.name || 'mimi';
     this.systemPrompt = modelConfig.systemPrompt || DEFAULT_SYSTEM_PROMPT;
     this.maxContextTurns = modelConfig.maxContextTurns || 20;
     this.maxToolIterations = modelConfig.maxToolIterations || 10;
@@ -770,10 +770,10 @@ class CoreAgent {
           if (finalCommand.startsWith('browser-use ')) {
             const isOpenCmd = /^browser-use\s+(--\S+\s+)*open(\s|$)/.test(finalCommand);
             if (isOpenCmd && !finalCommand.includes('--headed') &&
-                process.env.BROWSER_USE_HEADLESS === 'false') {
+              process.env.BROWSER_USE_HEADLESS === 'false') {
               // 先关闭可能残留的 headless daemon，确保新 daemon 以 headed 模式启动
-              finalCommand = `browser-use close >/dev/null 2>&1; ` + 
-                             finalCommand.replace('browser-use ', 'browser-use --headed ');
+              finalCommand = `browser-use close >/dev/null 2>&1; ` +
+                finalCommand.replace('browser-use ', 'browser-use --headed ');
             }
           }
 
@@ -888,9 +888,9 @@ class CoreAgent {
     let trimmed = history.slice(history.length - maxLen);
 
     // ── 新增：总字符数限制，防止上下文过长 ──
-    const MAX_TOTAL_CHARS = 60000; 
+    const MAX_TOTAL_CHARS = 60000;
     let currentTotal = trimmed.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
-    
+
     while (currentTotal > MAX_TOTAL_CHARS && trimmed.length > 2) {
       const removed = trimmed.shift(); // 移除最旧的消息
       currentTotal -= (removed.content?.length || 0);
@@ -1096,7 +1096,7 @@ class CoreAgent {
 
           const result = await this._handleToolCall(tc.function.name, args);
           let displayResult = typeof result === 'object' ? JSON.stringify(result) : String(result);
-          
+
           // 限制工具输出长度，防止撑爆上下文 (约 20,000 字符)
           if (displayResult.length > 20000) {
             console.log(`[CoreAgent] 工具 ${tc.function.name} 输出过长 (${displayResult.length})，已截断`);

@@ -17,7 +17,7 @@ import MCPorterService from '../plugin/mcporter.js';
 dotenv.config();
 
 /**
- * SmartHomeClaw Agent 主入口
+ * mimi Agent 主入口
  * 基于 Qwen Code 无头模式驱动的智能家居 AI Agent
  */
 class SmartHomeAgent {
@@ -37,7 +37,7 @@ class SmartHomeAgent {
    * 初始化 Agent
    */
   async init() {
-    console.log('[Agent] Initializing SmartHomeClaw...');
+    console.log('[Agent] Initializing mimi...');
 
     // 1. 加载配置
     await this.loadConfig();
@@ -117,7 +117,7 @@ class SmartHomeAgent {
    * 启动 Agent
    */
   async start() {
-    console.log('[Agent] Starting SmartHomeClaw...');
+    console.log('[Agent] Starting mimi...');
 
     // 1. 注册 Cron 任务
     await this.registerCronTasks();
@@ -149,7 +149,7 @@ class SmartHomeAgent {
       });
     }
 
-    console.log('[Agent] SmartHomeClaw is running...');
+    console.log('[Agent] mimi is running...');
     console.log('[Agent] Press Ctrl+C to stop');
   }
 
@@ -157,7 +157,7 @@ class SmartHomeAgent {
    * 停止 Agent
    */
   async stop() {
-    console.log('[Agent] Stopping SmartHomeClaw...');
+    console.log('[Agent] Stopping mimi...');
 
     this.heartbeat.stop();
     this.scheduler.stopAll();
@@ -307,7 +307,7 @@ class SmartHomeAgent {
     const systemPrompt = this.config.agent?.system_prompt;
 
     return {
-      name: this.config.agent?.name || 'SmartHomeClaw',
+      name: this.config.agent?.name || 'mimi',
       model: modelName,
       baseUrl: matched.base_url,
       apiKey: apiKey,

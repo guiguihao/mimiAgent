@@ -1,7 +1,7 @@
-# zhuzhu Agent 基础配置
+# mimi Agent 基础配置
 
 agent:
-  name: "zhuzhu"
+  name: "mimi"
   version: "1.0.0"
   workspace: "./workspace"   # 工作目录：AI 生成的图片、文件、报告等存放位置
   system_prompt: |

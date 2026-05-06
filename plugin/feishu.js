@@ -218,7 +218,7 @@ function buildCardContent(text) {
   return JSON.stringify({
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: '🏠 SmartHomeClaw' },
+      title: { tag: 'plain_text', content: '🏠 mimi' },
       template: 'blue',
     },
     elements,
@@ -462,7 +462,7 @@ class FeishuService {
         const obj = JSON.parse(data);
         const now = Date.now();
         let loadedCount = 0;
-        
+
         for (const [key, ts] of Object.entries(obj)) {
           // 只加载未过期的记录
           if (now - ts < this._dedupTTL) {
@@ -482,7 +482,7 @@ class FeishuService {
    */
   _saveDedupCache() {
     if (this._saveTimer) clearTimeout(this._saveTimer);
-    
+
     this._saveTimer = setTimeout(() => {
       try {
         const obj = Object.fromEntries(this._processedMessageMap);
@@ -493,7 +493,7 @@ class FeishuService {
       }
     }, 2000); // 2秒防抖
   }
-  
+
   /**
    * 从本地加载会话映射
    */
@@ -504,7 +504,7 @@ class FeishuService {
         const obj = JSON.parse(data);
         this._chatSessionMap = obj;
         console.log(`[Feishu] Loaded ${Object.keys(obj).length} sessions from local cache`);
-        
+
         // 如果没有配置通知群，且缓存中有会话，则尝试恢复最后一个会话作为通知渠道
         if (!this.notificationChatId && Object.keys(obj).length > 0) {
           const lastChatId = Object.keys(obj)[Object.keys(obj).length - 1];
@@ -653,7 +653,7 @@ class FeishuService {
     if (!this._chatSessionMap[chatId]) {
       this._chatSessionMap[chatId] = 'feishu_' + chatId;
       this._saveSessions(); // 发现新会话，持久化
-      
+
       // 如果之前没有通知渠道，自动将第一个发现的会话设为通知渠道
       if (!this.notificationChatId) {
         this.notificationChatId = chatId;
@@ -1033,14 +1033,14 @@ class FeishuService {
     if (this.notificationChatId) {
       return this.send(this.notificationChatId, text);
     }
-    
+
     // 如果没有配置通知群，则发送给所有活跃会话
     const chatIds = Object.keys(this._chatSessionMap);
     if (chatIds.length === 0) {
       console.warn('[Feishu] No active chats or notification_chat_id configured for broadcast');
       return;
     }
-    
+
     console.log(`[Feishu] Broadcasting to ${chatIds.length} active chats`);
     return Promise.all(chatIds.map(id => this.send(id, text)));
   }

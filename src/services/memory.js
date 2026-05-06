@@ -8,10 +8,10 @@ import path from 'path';
 class MemoryService {
   constructor(config = {}) {
     this.directory = config.directory || './memory';
-    this.userProfileFile = config.userProfile || 'USER_PROFILE.md';
-    this.habitsFile = config.habits || 'HABITS.md';
+    this.userProfileFile = config.user_profile || 'USER_PROFILE.md';
+    this.knowledgeFile = config.knowledge || 'KNOWLEDGE.md';
     this.factsFile = config.facts || 'FACTS.md';
-    this.environmentFile = config.environment || 'ENVIRONMENT.md';
+    this.contextFile = config.context || 'CONTEXT.md';
   }
 
   /**
@@ -22,14 +22,14 @@ class MemoryService {
       await fs.mkdir(this.directory, { recursive: true });
       
       // 确保文件存在
-      const files = [this.userProfileFile, this.habitsFile, this.factsFile, this.environmentFile];
+      const files = [this.userProfileFile, this.knowledgeFile, this.factsFile, this.contextFile];
       for (const file of files) {
         const filePath = path.join(this.directory, file);
         try {
           await fs.access(filePath);
         } catch {
-          if (file === this.environmentFile) {
-            await fs.writeFile(filePath, `# 环境状态 (最近更新: ${new Date().toLocaleString()})\n\n## 传感器上报\n- 暂无数据\n\n## 户外天气\n- 暂无数据\n\n## 未来七天预报\n- 暂无数据\n`);
+          if (file === this.contextFile) {
+            await fs.writeFile(filePath, `# 上下文与背景 (最近更新: ${new Date().toLocaleString()})\n\n## 当前状态\n- 暂无数据\n\n## 附加背景\n- 暂无数据\n`);
           } else {
             await fs.writeFile(filePath, `# ${file.replace('.md', '')}\n\n`);
           }
@@ -52,16 +52,16 @@ class MemoryService {
   }
 
   /**
-   * 读取习惯记录
-   * @returns {string} 习惯记录内容
+   * 读取知识库
+   * @returns {string} 知识库内容
    */
-  async loadHabits() {
-    return this.readFile(this.habitsFile);
+  async loadKnowledge() {
+    return this.readFile(this.knowledgeFile);
   }
 
   /**
-   * 读取家居信息
-   * @returns {string} 家居信息内容
+   * 读取事实信息
+   * @returns {string} 事实信息内容
    */
   async loadFacts() {
     return this.readFile(this.factsFile);
@@ -76,15 +76,15 @@ class MemoryService {
   }
 
   /**
-   * 更新习惯记录
+   * 更新知识库
    * @param {string} content - 新内容
    */
-  async updateHabits(content) {
-    return this.writeFile(this.habitsFile, content);
+  async updateKnowledge(content) {
+    return this.writeFile(this.knowledgeFile, content);
   }
 
   /**
-   * 更新家居信息
+   * 更新事实信息
    * @param {string} content - 新内容
    */
   async updateFacts(content) {
@@ -92,17 +92,17 @@ class MemoryService {
   }
 
   /**
-   * 读取环境信息
+   * 读取上下文背景
    */
-  async loadEnvironment() {
-    return this.readFile(this.environmentFile);
+  async loadContext() {
+    return this.readFile(this.contextFile);
   }
 
   /**
-   * 更新环境信息
+   * 更新上下文背景
    */
-  async updateEnvironment(content) {
-    return this.writeFile(this.environmentFile, content);
+  async updateContext(content) {
+    return this.writeFile(this.contextFile, content);
   }
 
   /**
@@ -146,9 +146,9 @@ class MemoryService {
   async getAll() {
     return {
       userProfile: await this.loadUserProfile(),
-      habits: await this.loadHabits(),
+      knowledge: await this.loadKnowledge(),
       facts: await this.loadFacts(),
-      environment: await this.loadEnvironment(),
+      context: await this.loadContext(),
     };
   }
 }

@@ -6,13 +6,6 @@ allowed-tools: Bash(browser-use:*)
 
 The `browser-use` command provides fast, persistent browser automation. A background daemon keeps the browser open across commands.
 
-> [!IMPORTANT]
-> **登录持久化机制**：
-> - **全自动无缝持久化**：本项目已为 `browser-use` 底层源码打补丁。只要环境变量中包含 `BROWSER_USE_USER_DATA_DIR`（默认指向 `./workspace/browser-use-config`），所有浏览器操作的 Cookie、登录态、LocalStorage 会**自动持久化**，无需额外代码，跨重启不丢失！
-> - **无冲突设计**：这套方案使用专门的独立目录，绝不会因为你本地打开了真正的 Chrome 而报错。
-> - **只有 `open` 命令会被自动注入 `--headed`**。
-> - **Daemon 卡住时**：运行 `browser-use close` 然后重试。
-
 
 ## Prerequisites
 
@@ -183,16 +176,6 @@ browser-use open https://github.com
 # 如果这是第一次，你会看到它是未登录状态。此时请手动在弹出的有头窗口中登录。
 # 登录完成后，关掉或放置不管。下一次 AI 重新执行 open 时，会发现已是登录状态！
 ```
-
-**方案 B：使用真实 Chrome Profile（仅当需要同步你主力浏览器的登录态，且 Chrome 必须完全关闭时）**
-```bash
-browser-use profile list                           # 查看本机所有 Chrome Profile
-# 先完全关闭 Chrome，再执行：
-browser-use --profile "用户1" open https://github.com  # 使用 Chrome/Default（已登录）
-```
-> [!TIP]
-> 可用的 Profile：`用户1`（Chrome/Default，主要账号）| `您的 Chrome`（Chrome/Profile 1）
-> 注意：如果 Chrome 已经打开，`--profile` 会因 profile 目录被锁定而报错。建议只用上面的默认自动机制。
 
 
 ### Exposing Local Dev Servers

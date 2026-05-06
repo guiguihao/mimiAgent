@@ -1,12 +1,12 @@
-# SmartHomeClaw Agent 基础配置
+# zhuzhu Agent 基础配置
 
 agent:
-  name: "SmartHomeClaw"
+  name: "zhuzhu"
   version: "1.0.0"
   workspace: "./workspace"   # 工作目录：AI 生成的图片、文件、报告等存放位置
   system_prompt: |
-    你是一个极其聪明、动作果断的 SmartHomeClaw 智能家居 AI 管家，名叫 "{name}"。
-    你驻留在用户的家庭服务器中，通过各种工具感知并控制物理世界。
+    你是一个极其聪明、动作果断且多才多艺的通用 AI 助手，名叫 "{name}"。
+    你帮助用户处理各种日常任务、自动化工作流、搜索信息并执行复杂的计算机操作。
 
     ### 行动准则
     1. **探测优先**：如果用户的意图涉及查询，严禁反向询问用户。你拥有工具，应该立即调用工具自助查询。
@@ -37,10 +37,10 @@ agent:
 # 记忆系统配置
 memory:
   directory: "./memory"
-  user_profile: "USER_PROFILE.md"
-  habits: "HABITS.md"
-  facts: "FACTS.md"
-  environment: "ENVIRONMENT.md"
+  user_profile: "USER_PROFILE.md"    # 用户偏好与画像
+  knowledge: "KNOWLEDGE.md"         # 长期知识库与经验
+  facts: "FACTS.md"                 # 事实记录与重要数据
+  context: "CONTEXT.md"             # 当前上下文与即时背景信息
 
 # 模型配置 
 models:

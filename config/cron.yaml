@@ -41,7 +41,7 @@ cron:
     
     - id: "one_idkey_signin"
       name: "one_idkey_signin,签到,拿积分"
-      cron: "13 9 * * *"
+      cron: "26 7 * * *"
       enabled: true
       prompt: "browser-user打开https://one.idkey.cc,寻找并点击签到按钮，完成之后关闭浏览器,并把结果反馈给我"
     

@@ -99,10 +99,10 @@ class CoreAgent {
     try {
       const all = await this._memoryService.getAll();
       const profile = all.userProfile || '';
-      const habits = all.habits || '';
+      const knowledge = all.knowledge || '';
       const facts = all.facts || '';
-      const environment = all.environment || '';
-      return `用户偏好：${profile || '无'}\n习惯记录：${habits || '无'}\n事实：${facts || '无'}\n当前环境状态：${environment || '无'}`;
+      const context = all.context || '';
+      return `用户偏好与画像：${profile || '无'}\n长期知识与经验：${knowledge || '无'}\n事实记录：${facts || '无'}\n当前对话背景与上下文：${context || '无'}`;
     } catch {
       return '';
     }
@@ -154,28 +154,28 @@ class CoreAgent {
         {
           type: 'function',
           function: {
-            name: 'memory_get_habits',
-            description: '获取用户习惯记录',
+            name: 'memory_get_knowledge',
+            description: '获取长期知识库与经验记录',
             parameters: { type: 'object', properties: {}, required: [] },
           },
         },
         {
           type: 'function',
           function: {
-            name: 'memory_get_environment',
-            description: '获取当前环境状态（天气、预报、传感器数据）',
+            name: 'memory_get_context',
+            description: '获取当前对话背景与即时上下文信息',
             parameters: { type: 'object', properties: {}, required: [] },
           },
         },
         {
           type: 'function',
           function: {
-            name: 'memory_update_environment',
-            description: '更新环境状态信息（用于保存最新的天气或传感器数据）',
+            name: 'memory_update_context',
+            description: '更新当前对话背景与即时上下文信息（用于保存最新的关键背景或阶段性状态）',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '完整的环境状态 Markdown 内容' },
+                content: { type: 'string', description: '完整的上下文背景内容' },
               },
               required: ['content'],
             },
@@ -184,12 +184,12 @@ class CoreAgent {
         {
           type: 'function',
           function: {
-            name: 'memory_update_habits',
-            description: '更新用户习惯记录',
+            name: 'memory_update_knowledge',
+            description: '更新长期知识库与经验记录（用于保存有价值的长期信息）',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '新的习惯内容' },
+                content: { type: 'string', description: '新的知识或经验内容' },
               },
               required: ['content'],
             },
@@ -199,7 +199,7 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'memory_get_facts',
-            description: '获取重要事实记录',
+            description: '获取重要事实记录与关键数据',
             parameters: { type: 'object', properties: {}, required: [] },
           },
         },
@@ -207,11 +207,11 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'memory_update_facts',
-            description: '更新重要事实记录',
+            description: '更新重要事实记录与关键数据',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '新的事实内容' },
+                content: { type: 'string', description: '新的事实或数据内容' },
               },
               required: ['content'],
             },
@@ -526,21 +526,21 @@ class CoreAgent {
         case 'memory_update_user_profile':
           await this._memoryService.updateUserProfile(args.content);
           return '已更新用户偏好';
-        case 'memory_get_habits':
-          return await this._memoryService.loadHabits();
-        case 'memory_update_habits':
-          await this._memoryService.updateHabits(args.content);
-          return '已更新习惯记录';
+        case 'memory_get_knowledge':
+          return await this._memoryService.loadKnowledge();
+        case 'memory_update_knowledge':
+          await this._memoryService.updateKnowledge(args.content);
+          return '已更新长期知识库';
         case 'memory_get_facts':
           return await this._memoryService.loadFacts();
         case 'memory_update_facts':
           await this._memoryService.updateFacts(args.content);
           return '已更新事实记录';
-        case 'memory_get_environment':
-          return await this._memoryService.loadEnvironment();
-        case 'memory_update_environment':
-          await this._memoryService.updateEnvironment(args.content);
-          return '已更新环境状态';
+        case 'memory_get_context':
+          return await this._memoryService.loadContext();
+        case 'memory_update_context':
+          await this._memoryService.updateContext(args.content);
+          return '已更新对话背景';
         default:
           return `未知记忆工具: ${toolName}`;
       }

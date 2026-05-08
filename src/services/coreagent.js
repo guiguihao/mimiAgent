@@ -337,11 +337,13 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'cmd_exec',
-            description: '在服务器上执行终端命令（如运行 Python 脚本）',
+            description: '在服务器上执行终端命令（如运行 Python 脚本）。对于生图、浏览器自动化等耗时任务，请通过 timeout_ms 设置足够的超时时间（生图建议 600000 即 10 分钟）。',
             parameters: {
               type: 'object',
               properties: {
                 command: { type: 'string', description: '要执行的完整命令字符串' },
+                timeout_ms: { type: 'number', description: '超时时间（毫秒）。默认 30000，普通 Python 脚本自动使用 120000，生图等耐时脚本建议传入 600000。' },
+                cwd: { type: 'string', description: '命令执行目录（可选）' },
               },
               required: ['command'],
             },
@@ -778,11 +780,24 @@ class CoreAgent {
           }
 
           console.log(`[CoreAgent] cmd_exec 实际执行: ${finalCommand.substring(0, 120)}`);
+
+          // 超时策略：自动识别耐时命令类型
+          let defaultTimeout = 30000;
+          if (args.timeout_ms) {
+            // AI 显式指定，优先级最高
+            defaultTimeout = args.timeout_ms;
+          } else if (/python3?\s/i.test(finalCommand)) {
+            // Python 脚本默认 2 分钟（简单脚本），生图/浏览器类超 10 分钟自动详记
+            const isLongRunning = /gemini_image|gemini_canvas|browser|playwright|selenium/i.test(finalCommand);
+            defaultTimeout = isLongRunning ? 600000 : 120000;
+            console.log(`[CoreAgent] 跑测 ${isLongRunning ? '耐时' : '普通'} Python 脚本，超时设为 ${defaultTimeout / 1000}s`);
+          }
+
           const { stdout, stderr } = await execAsync(finalCommand, {
             cwd: args.cwd || process.cwd(),
-            env: { ...process.env, ...args.env }, // 显式透传当前环境变量
-            timeout: args.timeout || 30000,
-            maxBuffer: 1024 * 1024 // 1MB
+            env: { ...process.env, ...args.env },
+            timeout: defaultTimeout,
+            maxBuffer: 10 * 1024 * 1024 // 10MB
           });
           return stdout || stderr || '(无输出)';
 

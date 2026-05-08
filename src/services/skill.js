@@ -26,7 +26,7 @@ class SkillService {
   _parseFrontmatter(content) {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!match) return { content };
-    
+
     try {
       const metadata = yaml.parse(match[1]);
       const body = content.slice(match[0].length).trim();
@@ -50,7 +50,7 @@ class SkillService {
         } else if (entry.isDirectory()) {
           const subDirPath = path.join(this.directory, entry.name);
           const subFiles = await fs.readdir(subDirPath);
-          
+
           if (subFiles.includes('SKILL.md')) {
             const content = await fs.readFile(path.join(subDirPath, 'SKILL.md'), 'utf8');
             const { metadata } = this._parseFrontmatter(content);
@@ -72,27 +72,54 @@ class SkillService {
   }
 
   /**
-   * 执行指定技能
+   * 解析技能路径（支持目录名匹配和 SKILL.md 中的 friendly name 匹配）
    */
-  async run(name, params = {}, agent) {
+  async _resolveSkillPath(name) {
+    // 1. 尝试直接路径匹配（文件名或目录名与技能名一致）
     const possiblePaths = [
       path.join(this.directory, `${name}.js`),
       path.join(this.directory, name, 'index.js'),
       path.join(this.directory, name, 'SKILL.md'),
     ];
 
-    let foundPath = null;
     for (const p of possiblePaths) {
       try {
         const stats = await fs.stat(p);
-        if (stats.isFile()) {
-          foundPath = p;
-          break;
-        }
+        if (stats.isFile()) return p;
       } catch (e) {
-        // 文件不存在，继续尝试下一个路径
+        // 忽略
       }
     }
+
+    // 2. 尝试遍历所有目录，匹配 SKILL.md 中的 name 字段
+    try {
+      const entries = await fs.readdir(this.directory, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const skillMdPath = path.join(this.directory, entry.name, 'SKILL.md');
+          try {
+            const content = await fs.readFile(skillMdPath, 'utf8');
+            const { metadata } = this._parseFrontmatter(content);
+            if (metadata?.name === name) {
+              return skillMdPath;
+            }
+          } catch (e) {
+            // 该目录下没有 SKILL.md 或读取失败
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Skill] Resolve path error:', e.message);
+    }
+
+    return null;
+  }
+
+  /**
+   * 执行指定技能
+   */
+  async run(name, params = {}, agent) {
+    const foundPath = await this._resolveSkillPath(name);
 
     if (!foundPath) throw new Error(`Skill "${name}" not found`);
 
@@ -104,9 +131,9 @@ class SkillService {
       } else if (foundPath.endsWith('.md')) {
         const rawContent = await fs.readFile(foundPath, 'utf8');
         const { metadata, content } = this._parseFrontmatter(rawContent);
-        
+
         console.log(`[Skill] Executing Standard Markdown skill: ${name}`);
-        
+
         const prompt = `你现在正在执行 "${name}" 技能的内部逻辑。
 技能描述: ${metadata?.description || '无'}
 参考手册/运行指令:
@@ -123,9 +150,9 @@ ${content}
           appendSystemPrompt: `你现在是 "${name}" 技能的执行专家。请严格按照手册通过 cmd_exec 完成任务，严禁二次调用技能工具。`,
           toolFilter: (tool) => {
             // 严禁在技能内部调用 skill_run 或任何具体技能映射工具 (如 baidu_search)
-            const isSkillTool = tool.function.name === 'skill_run' || 
-                                tool.function.name === 'skill_list' ||
-                                tool.function.description?.includes('[Skill]');
+            const isSkillTool = tool.function.name === 'skill_run' ||
+              tool.function.name === 'skill_list' ||
+              tool.function.description?.includes('[Skill]');
             return !isSkillTool;
           }
         });

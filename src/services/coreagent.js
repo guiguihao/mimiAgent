@@ -32,6 +32,11 @@ class CoreAgent {
     this.model = modelConfig.model;
     this.thinking = modelConfig.thinking || false;
     this.stream = modelConfig.stream || false;
+    this.fallbackConfig = modelConfig.fallback || null;
+    
+    if (this.fallbackConfig) {
+      console.log(`[CoreAgent] Fallback model available: ${this.fallbackConfig.model}`);
+    }
 
     this._sessions = {};
     this._memoryService = null;
@@ -1070,9 +1075,57 @@ class CoreAgent {
 
       // 根据是否流式选择不同的调用方式
       const onChunk = options.onChunk || null;
-      const choice = this.stream
-        ? await this._handleStreamRequest(requestOptions, onChunk)
-        : await this._handleNormalRequest(requestOptions);
+      let choice;
+      try {
+        choice = this.stream
+          ? await this._handleStreamRequest(requestOptions, onChunk)
+          : await this._handleNormalRequest(requestOptions);
+      } catch (error) {
+        if (this.fallbackConfig) {
+          console.warn(`[CoreAgent] Primary model (${this.model}) failed: ${error.message}. Trying fallback.`);
+          
+          // Switch to fallback config
+          this.model = this.fallbackConfig.model;
+          this.thinking = this.fallbackConfig.thinking || false;
+          this.stream = this.fallbackConfig.stream || false;
+          
+          // Create fallback client
+          const fallbackClient = new OpenAI({
+            baseURL: this.fallbackConfig.baseUrl,
+            apiKey: this.fallbackConfig.apiKey,
+            timeout: 60000,
+            defaultHeaders: {
+              'User-Agent': 'curl/8.7.1',
+            },
+          });
+          
+          // Replace client
+          this.client = fallbackClient;
+          
+          // Update requestOptions
+          requestOptions.model = this.model;
+          if (this.thinking) {
+            requestOptions.temperature = 1;
+          } else {
+            requestOptions.temperature = 0.7;
+          }
+          requestOptions.stream = this.stream;
+          
+          try {
+            console.log(`[CoreAgent] Retrying with fallback model: ${this.model}`);
+            choice = this.stream
+              ? await this._handleStreamRequest(requestOptions, onChunk)
+              : await this._handleNormalRequest(requestOptions);
+              
+            console.log(`[CoreAgent] Fallback successful. Keeping fallback model for remaining steps.`);
+          } catch (fallbackError) {
+            console.error(`[CoreAgent] Fallback model also failed: ${fallbackError.message}`);
+            throw fallbackError;
+          }
+        } else {
+          throw error;
+        }
+      }
 
       const msgToStore = {
         role: choice.role,

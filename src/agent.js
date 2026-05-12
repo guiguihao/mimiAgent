@@ -303,6 +303,46 @@ class SmartHomeAgent {
 
     console.log(`[Agent] Using model: ${modelName} @ provider: ${matched.name}, thinking=${matchedModelConfig.thinking}, stream=${matchedModelConfig.stream}`);
 
+    // 解析备用模型
+    const fallbackVal = models.fallback;
+    let fallbackConfig = null;
+    if (fallbackVal) {
+      let fProviderName = null;
+      let fModelName = fallbackVal;
+      if (fallbackVal.includes('/')) {
+        fProviderName = fallbackVal.slice(0, fallbackVal.indexOf('/'));
+        fModelName = fallbackVal.slice(fallbackVal.indexOf('/') + 1);
+      }
+      
+      let fMatched = providers.find(p => p.name === fProviderName);
+      let fMatchedModelConfig = null;
+      
+      if (fMatched && fMatched.models) {
+        for (const m of fMatched.models) {
+          if (typeof m === 'string' && m === fModelName) {
+            fMatchedModelConfig = { id: m, thinking: false, stream: false };
+            break;
+          } else if (typeof m === 'object' && m.id === fModelName) {
+            fMatchedModelConfig = m;
+            break;
+          }
+        }
+      }
+      
+      if (fMatched && fMatchedModelConfig) {
+        const fApiKeyEnv = fMatched.api_key_env || 'OPENAI_API_KEY';
+        const fApiKey = process.env[fApiKeyEnv] || '';
+        fallbackConfig = {
+          model: fMatchedModelConfig.id,
+          baseUrl: fMatched.base_url,
+          apiKey: fApiKey,
+          thinking: fMatchedModelConfig.thinking || false,
+          stream: fMatchedModelConfig.stream || false,
+        };
+        console.log(`[Agent] Fallback model configured: ${fallbackConfig.model} @ provider: ${fMatched.name}`);
+      }
+    }
+
     // 获取系统提示词
     const systemPrompt = this.config.agent?.system_prompt;
 
@@ -313,7 +353,8 @@ class SmartHomeAgent {
       apiKey: apiKey,
       thinking: matchedModelConfig.thinking || false,
       stream: matchedModelConfig.stream || false,
-      systemPrompt: systemPrompt
+      systemPrompt: systemPrompt,
+      fallback: fallbackConfig
     };
   }
 

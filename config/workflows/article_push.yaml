@@ -1,0 +1,55 @@
+# mimi 工作流配置
+# 支持步骤类型: decide / skill / mcp / condition / parallel / notify / wait
+
+workflows:
+
+  # ─── 文章发布工作流 ────────────────────────────────────────────────
+  - id: "article_push_workflow"
+    name: "全平台一键发文工作流"
+    steps:
+      - id: "extract_requirements"
+        type: "decide"
+        prompt: "你是一个专业的编辑助理。请仔细阅读用户当前的对话上下文，提取出用户指定的“文章主题”以及提供的“参考文章或核心素材”。如果参考文章较长，请做适当的核心要点提炼。最后请直接输出结构化的需求说明供下游创作者使用，格式如下：\n【创作主题】：...\n【参考素材】：..."
+        output: "content_brief"
+
+      - id: "notify_start"
+        type: "notify"
+        message: "🚀 **【全平台自动发文】任务开始！**\n\n📋 **已获取创作需求**：\n${content_brief}\n\n⏳ 正在依次为您生成 Rin博客、微信公众号及小红书的内容，因为同时生成可能会触发 API 频率限制，请耐心稍候..."
+
+      - id: "create_rin"
+        type: "skill"
+        skill: "generate_rin"
+        params:
+          prompt: "请根据以下需求进行创作，按照 generate_rin 技能规范生成 Markdown 内容、封面配图，并使用 rin_uploader.py 发布至博客（或存为草稿）。\n\n${content_brief}"
+        output: "rin_result"
+        
+      - id: "create_wechat"
+        type: "skill"
+        skill: "generate_wechat_article"
+        params:
+          prompt: "请根据以下需求进行创作，按照 generate_wechat_article 技能规范生成微信排版文章、封面及内页配图，并生成 meta 配置。\n\n${content_brief}"
+        output: "wechat_result"
+
+      - id: "create_xiaohongshu"
+        type: "skill"
+        skill: "generate_xiaohongshu"
+        params:
+          prompt: "请根据以下需求进行创作，按照 generate_xiaohongshu 技能规范生成爆款标题、Emoji 文案、一系列精美的桌面截图/插图，并导出 json。\n\n${content_brief}"
+        output: "xhs_result"
+
+      - id: "notify_complete"
+        type: "notify"
+        message: |
+          ✅ **全平台发文任务已全部完成！**
+          
+          📋 **需求回顾**：
+          ${content_brief}
+          
+          📝 **Rin 博客执行反馈**：
+          ${rin_result}
+          
+          🟢 **微信公众号执行反馈**：
+          ${wechat_result}
+          
+          📕 **小红书执行反馈**：
+          ${xhs_result}

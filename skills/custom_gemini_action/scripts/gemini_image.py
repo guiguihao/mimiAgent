@@ -178,7 +178,14 @@ def run_gemini_image(prompts, is_login_mode=False, headless=False, output_dir=No
                 time.sleep(random.uniform(1.2, 2.8))
                 page.click(input_selector)
                 time.sleep(random.uniform(0.6, 1.2))
-                page.keyboard.type(prompt, delay=random.randint(80, 150))
+                # Use clipboard paste instead of keyboard.type to avoid crash with emoji/long text
+                try:
+                    page.evaluate("""async (text) => {
+                        await navigator.clipboard.writeText(text);
+                    }""", prompt)
+                    page.keyboard.press("Meta+v")
+                except Exception:
+                    page.keyboard.type(prompt, delay=random.randint(80, 150))
                 time.sleep(random.uniform(1.5, 3.0))
 
                 # 发送

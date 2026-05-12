@@ -25,6 +25,9 @@ class CoreAgent {
       baseURL: modelConfig.baseUrl,
       apiKey: modelConfig.apiKey,
       timeout: modelConfig.timeout || 60000,
+      defaultHeaders: {
+        'User-Agent': 'curl/8.7.1',
+      },
     });
     this.model = modelConfig.model;
     this.thinking = modelConfig.thinking || false;

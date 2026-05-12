@@ -44,7 +44,7 @@ memory:
 
 # 模型配置 
 models:
-  default: "huoshan/GLM-5.1"
+  default: "moda/deepseek-ai/DeepSeek-V4-Flash"
   providers:
     - name: nvidia
       base_url: "https://integrate.api.nvidia.com/v1"
@@ -58,6 +58,13 @@ models:
       api_key_env: "VOLCENGINE_API_KEY"
       models:
         - id: "GLM-5.1"
+          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
+          stream: true      # 是否开启流式输出
+    - name: moda
+      base_url: "https://mota.guiguihao.cc.cd/v1"
+      api_key_env: "MODA_API_KEY"
+      models:
+        - id: "deepseek-ai/DeepSeek-V4-Flash"
           thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
           stream: true      # 是否开启流式输出
 

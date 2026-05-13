@@ -7,6 +7,70 @@ import json
 import base64
 from playwright.sync_api import sync_playwright
 
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
+
+def compress_image(filepath, quality=85, max_width=2048):
+    """
+    压缩图片：将 PNG 转为 JPEG，限制最大宽度，并按指定质量保存。
+    原文件将被替换为压缩后的 JPEG 文件。
+
+    Args:
+        filepath: 原图片路径（PNG 或其他格式）
+        quality:  JPEG 压缩质量 (1-95)，默认 85
+        max_width: 图片最大宽度（像素），超出则等比缩放，默认 2048
+
+    Returns:
+        str: 压缩后的文件路径
+    """
+    if not PIL_AVAILABLE:
+        print("[WARN] Pillow 未安装，跳过压缩。可运行 pip install Pillow 安装。")
+        return filepath
+
+    try:
+        original_size = os.path.getsize(filepath)
+        with Image.open(filepath) as img:
+            # 转换为 RGB（PNG 可能含 Alpha 通道，JPEG 不支持）
+            if img.mode in ("RGBA", "P", "LA"):
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                background.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                img = background
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            # 等比缩放（仅缩小，不放大）
+            w, h = img.size
+            if w > max_width:
+                scale = max_width / w
+                new_size = (max_width, int(h * scale))
+                img = img.resize(new_size, Image.LANCZOS)
+                print(f"[INFO] 图片已缩放: {w}x{h} → {new_size[0]}x{new_size[1]}")
+
+            # 保存为 JPEG（替换原文件路径，扩展名改为 .jpg）
+            jpg_path = os.path.splitext(filepath)[0] + ".jpg"
+            img.save(jpg_path, "JPEG", quality=quality, optimize=True)
+
+        compressed_size = os.path.getsize(jpg_path)
+        ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+        print(f"[INFO] ✅ 图片压缩完成: {os.path.basename(jpg_path)} "
+              f"({original_size // 1024}KB → {compressed_size // 1024}KB, 压缩率 {ratio:.1f}%)")
+
+        # 如果原文件与 jpg 路径不同，删除原 PNG
+        if jpg_path != filepath and os.path.exists(filepath):
+            os.remove(filepath)
+
+        return jpg_path
+
+    except Exception as e:
+        print(f"[WARN] 图片压缩失败 ({filepath}): {e}，保留原文件。")
+        return filepath
+
 def run_gemini_image(prompts, is_login_mode=False, headless=False, output_dir=None, target_url="https://gemini.google.com/app"):
     """
     向 Gemini 发送图片生成请求，支持多轮提示词，等待生成完毕后下载所有生成的图片。
@@ -302,6 +366,7 @@ def run_gemini_image(prompts, is_login_mode=False, headless=False, output_dir=No
                                             btn_loc.click()
                                         download = download_info.value
                                         download.save_as(filepath)
+                                        filepath = compress_image(filepath)
                                         print(f"[INFO] ✅ 下载成功 (通过按钮): {filepath}")
                                         all_saved_paths.append(filepath)
                                         clicked_and_saved = True
@@ -318,6 +383,7 @@ def run_gemini_image(prompts, is_login_mode=False, headless=False, output_dir=No
                                 _, b64data = src.split(",", 1)
                                 with open(filepath, "wb") as f:
                                     f.write(base64.b64decode(b64data))
+                                filepath = compress_image(filepath)
                                 print(f"[INFO] ✅ 已保存 (base64): {filepath}")
                                 all_saved_paths.append(filepath)
                             elif src.startswith("blob:") or src.startswith("http"):
@@ -337,6 +403,7 @@ def run_gemini_image(prompts, is_login_mode=False, headless=False, output_dir=No
                                     _, raw = b64data.split(",", 1)
                                     with open(filepath, "wb") as f:
                                         f.write(base64.b64decode(raw))
+                                    filepath = compress_image(filepath)
                                     print(f"[INFO] ✅ 已保存 (fetch): {filepath}")
                                     all_saved_paths.append(filepath)
 

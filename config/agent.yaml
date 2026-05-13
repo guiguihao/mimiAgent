@@ -44,9 +44,10 @@ memory:
 
 # 模型配置 
 models:
-  # default: "moda/deepseek-ai/DeepSeek-V4-Flash"
-  default: "huoshan/GLM-5.1"
-  fallback: "moda/deepseek-ai/DeepSeek-V4-Flash"
+  default:
+    - "huoshan/GLM-5.1"
+    - "moda/deepseek-ai/DeepSeek-V4-Flash"
+  fallback: "nvidia/openai/gpt-oss-120b"
   providers:
     - name: nvidia
       base_url: "https://integrate.api.nvidia.com/v1"

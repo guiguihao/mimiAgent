@@ -19,23 +19,40 @@ class CoreAgent {
     this.maxContextTurns = modelConfig.maxContextTurns || 20;
     this.maxToolIterations = modelConfig.maxToolIterations || 10;
     this.sessionDir = modelConfig.sessionDir || './sessions';
-    console.log(`[CoreAgent] model=${modelConfig.model}, baseUrl=${modelConfig.baseUrl}`);
-
+    this.primaryConfigs = modelConfig.primaryConfigs || [];
+    if (this.primaryConfigs.length === 0 && modelConfig.model) {
+      // backward compatibility
+      this.primaryConfigs.push({
+        model: modelConfig.model,
+        baseUrl: modelConfig.baseUrl,
+        apiKey: modelConfig.apiKey,
+        thinking: modelConfig.thinking,
+        stream: modelConfig.stream
+      });
+    }
+    this.currentPrimaryIndex = 0;
+    
+    const initPrimary = this.primaryConfigs[0] || {};
+    console.log(`[CoreAgent] Initialized with primary model=${initPrimary.model}, baseUrl=${initPrimary.baseUrl}`);
+    
     this.client = new OpenAI({
-      baseURL: modelConfig.baseUrl,
-      apiKey: modelConfig.apiKey,
+      baseURL: initPrimary.baseUrl || modelConfig.baseUrl,
+      apiKey: initPrimary.apiKey || modelConfig.apiKey,
       timeout: modelConfig.timeout || 60000,
       defaultHeaders: {
         'User-Agent': 'curl/8.7.1',
       },
     });
-    this.model = modelConfig.model;
-    this.thinking = modelConfig.thinking || false;
-    this.stream = modelConfig.stream || false;
-    this.fallbackConfig = modelConfig.fallback || null;
+    this.model = initPrimary.model || modelConfig.model;
+    this.thinking = initPrimary.thinking || modelConfig.thinking || false;
+    this.stream = initPrimary.stream || modelConfig.stream || false;
+    this.fallbackConfigs = modelConfig.fallbackConfigs || [];
+    if (modelConfig.fallback) {
+      this.fallbackConfigs.push(modelConfig.fallback);
+    }
     
-    if (this.fallbackConfig) {
-      console.log(`[CoreAgent] Fallback model available: ${this.fallbackConfig.model}`);
+    if (this.fallbackConfigs.length > 0) {
+      console.log(`[CoreAgent] ${this.fallbackConfigs.length} fallback model(s) available.`);
     }
 
     this._sessions = {};
@@ -1050,6 +1067,23 @@ class CoreAgent {
     const tools = await this._getAllTools(options.toolFilter);
     let finalResponse = '';
 
+    if (this.primaryConfigs && this.primaryConfigs.length > 0) {
+      const pConfig = this.primaryConfigs[this.currentPrimaryIndex];
+      this.currentPrimaryIndex = (this.currentPrimaryIndex + 1) % this.primaryConfigs.length;
+      
+      this.model = pConfig.model;
+      this.thinking = pConfig.thinking || false;
+      this.stream = pConfig.stream || false;
+      
+      this.client = new OpenAI({
+        baseURL: pConfig.baseUrl,
+        apiKey: pConfig.apiKey,
+        timeout: 60000,
+        defaultHeaders: { 'User-Agent': 'curl/8.7.1' },
+      });
+      console.log(`[CoreAgent] Round-robin selected primary model: ${this.model}`);
+    }
+
     for (let i = 0; i < this.maxToolIterations; i++) {
       const requestOptions = {
         model: this.model,
@@ -1081,46 +1115,48 @@ class CoreAgent {
           ? await this._handleStreamRequest(requestOptions, onChunk)
           : await this._handleNormalRequest(requestOptions);
       } catch (error) {
-        if (this.fallbackConfig) {
-          console.warn(`[CoreAgent] Primary model (${this.model}) failed: ${error.message}. Trying fallback.`);
+        if (this.fallbackConfigs && this.fallbackConfigs.length > 0) {
+          console.warn(`[CoreAgent] Primary model (${this.model}) failed: ${error.message}. Trying fallbacks.`);
           
-          // Switch to fallback config
-          this.model = this.fallbackConfig.model;
-          this.thinking = this.fallbackConfig.thinking || false;
-          this.stream = this.fallbackConfig.stream || false;
+          let success = false;
+          let lastError = error;
           
-          // Create fallback client
-          const fallbackClient = new OpenAI({
-            baseURL: this.fallbackConfig.baseUrl,
-            apiKey: this.fallbackConfig.apiKey,
-            timeout: 60000,
-            defaultHeaders: {
-              'User-Agent': 'curl/8.7.1',
-            },
-          });
-          
-          // Replace client
-          this.client = fallbackClient;
-          
-          // Update requestOptions
-          requestOptions.model = this.model;
-          if (this.thinking) {
-            requestOptions.temperature = 1;
-          } else {
-            requestOptions.temperature = 0.7;
-          }
-          requestOptions.stream = this.stream;
-          
-          try {
-            console.log(`[CoreAgent] Retrying with fallback model: ${this.model}`);
-            choice = this.stream
-              ? await this._handleStreamRequest(requestOptions, onChunk)
-              : await this._handleNormalRequest(requestOptions);
+          for (const fbConfig of this.fallbackConfigs) {
+            try {
+              console.log(`[CoreAgent] Switching to fallback model: ${fbConfig.model}`);
+              this.model = fbConfig.model;
+              this.thinking = fbConfig.thinking || false;
+              this.stream = fbConfig.stream || false;
               
-            console.log(`[CoreAgent] Fallback successful. Keeping fallback model for remaining steps.`);
-          } catch (fallbackError) {
-            console.error(`[CoreAgent] Fallback model also failed: ${fallbackError.message}`);
-            throw fallbackError;
+              this.client = new OpenAI({
+                baseURL: fbConfig.baseUrl,
+                apiKey: fbConfig.apiKey,
+                timeout: 60000,
+                defaultHeaders: {
+                  'User-Agent': 'curl/8.7.1',
+                },
+              });
+              
+              requestOptions.model = this.model;
+              requestOptions.temperature = this.thinking ? 1 : 0.7;
+              requestOptions.stream = this.stream;
+              
+              console.log(`[CoreAgent] Retrying with fallback model: ${this.model}`);
+              choice = this.stream
+                ? await this._handleStreamRequest(requestOptions, onChunk)
+                : await this._handleNormalRequest(requestOptions);
+                
+              console.log(`[CoreAgent] Fallback to ${this.model} successful. Keeping fallback model for remaining steps.`);
+              success = true;
+              break; // Stop trying fallbacks
+            } catch (fbError) {
+              console.error(`[CoreAgent] Fallback model ${fbConfig.model} failed: ${fbError.message}`);
+              lastError = fbError;
+            }
+          }
+          
+          if (!success) {
+            throw lastError;
           }
         } else {
           throw error;

@@ -207,154 +207,124 @@ class SmartHomeAgent {
 
   /**
    * 从配置中构建模型配置
-   * 与 Python 版 load_model_from_config 对齐。
-   *
-   * default 格式为 "{provider}/{model}" 或纯模型名 "{model}"。
-   * provider 在 providers 数组中按 name 字段匹配。
-   * apiKey 通过 api_key_env 从环境变量读取。
+   * 支持 default 为数组，实现主模型与多个备用模型。
    */
   _buildModelConfig() {
     const models = this.config.models || {};
-    const defaultVal = models.default || 'gpt-4o';
+    let defaultVals = models.default;
+    let fallbackVals = models.fallback;
+    
+    // 归一化为数组
+    if (!defaultVals) {
+      defaultVals = ['gpt-4o'];
+    } else if (!Array.isArray(defaultVals)) {
+      defaultVals = [defaultVals];
+    }
+    
+    if (fallbackVals && !Array.isArray(fallbackVals)) {
+      fallbackVals = [fallbackVals];
+    } else if (!fallbackVals) {
+      fallbackVals = [];
+    }
+    
     const providers = models.providers || [];
-
-    // 分离 provider 前缀与模型名
-    if (defaultVal.includes('/')) {
-      const targetProvider = defaultVal.slice(0, defaultVal.indexOf('/'));
-      const targetModel = defaultVal.slice(defaultVal.indexOf('/') + 1);
-      var providerName = targetProvider;
-      var modelName = targetModel;
-    } else {
-      var providerName = null;
-      var modelName = defaultVal;
-    }
-
-    // 在 providers 数组中查找匹配的 provider
-    let matched = null;
-    let matchedModelConfig = null;
-    for (const provider of providers) {
-      if (providerName) {
-        if (provider.name === providerName) {
-          matched = provider;
-          break;
-        }
-      } else {
-        // 旧格式兼容：models 为字符串数组
-        if (provider.models && provider.models.includes(modelName)) {
-          matched = provider;
-          break;
-        }
-      }
-    }
-
-    // 在 matched provider 的 models 中查找具体的模型配置
-    if (matched && matched.models) {
-      for (const m of matched.models) {
-        if (typeof m === 'string' && m === modelName) {
-          matchedModelConfig = { id: m, thinking: false, stream: false };
-          break;
-        } else if (typeof m === 'object' && m.id === modelName) {
-          matchedModelConfig = m;
-          break;
-        }
-      }
-    }
-
-    // 未找到则 fallback 到第一个 provider 或默认值
-    if (!matched) {
-      if (providers.length > 0) {
-        matched = providers[0];
-        // 尝试从第一个 provider 中取第一个模型
-        const firstModel = matched.models?.[0];
-        if (typeof firstModel === 'object') {
-          matchedModelConfig = firstModel;
-          modelName = firstModel.id;
-        } else if (typeof firstModel === 'string') {
-          matchedModelConfig = { id: firstModel, thinking: false, stream: false };
-          modelName = firstModel;
-        }
-      } else {
-        matched = {
-          name: 'openai',
-          base_url: 'https://api.openai.com/v1',
-          api_key_env: 'OPENAI_API_KEY',
-          models: [{ id: 'gpt-4o', thinking: false, stream: false }],
-        };
-        matchedModelConfig = matched.models[0];
-        modelName = 'gpt-4o';
-      }
-    }
-
-    // 若只找到 provider 但没匹配到具体 model，取第一个
-    if (!matchedModelConfig && matched?.models?.length > 0) {
-      const first = matched.models[0];
-      if (typeof first === 'object') {
-        matchedModelConfig = first;
-        modelName = first.id;
-      } else {
-        matchedModelConfig = { id: first, thinking: false, stream: false };
-        modelName = first;
-      }
-    }
-
-    // 从环境变量读取 API Key
-    const apiKeyEnv = matched.api_key_env || 'OPENAI_API_KEY';
-    const apiKey = process.env[apiKeyEnv] || '';
-
-    console.log(`[Agent] Using model: ${modelName} @ provider: ${matched.name}, thinking=${matchedModelConfig.thinking}, stream=${matchedModelConfig.stream}`);
-
-    // 解析备用模型
-    const fallbackVal = models.fallback;
-    let fallbackConfig = null;
-    if (fallbackVal) {
-      let fProviderName = null;
-      let fModelName = fallbackVal;
-      if (fallbackVal.includes('/')) {
-        fProviderName = fallbackVal.slice(0, fallbackVal.indexOf('/'));
-        fModelName = fallbackVal.slice(fallbackVal.indexOf('/') + 1);
+    
+    // 解析模型配置的内部助手
+    const resolveModel = (modelStr) => {
+      if (!modelStr) return null;
+      let targetProvider = null;
+      let targetModel = modelStr;
+      if (modelStr.includes('/')) {
+        targetProvider = modelStr.slice(0, modelStr.indexOf('/'));
+        targetModel = modelStr.slice(modelStr.indexOf('/') + 1);
       }
       
-      let fMatched = providers.find(p => p.name === fProviderName);
-      let fMatchedModelConfig = null;
+      let matched = null;
+      let matchedModelConfig = null;
       
-      if (fMatched && fMatched.models) {
-        for (const m of fMatched.models) {
-          if (typeof m === 'string' && m === fModelName) {
-            fMatchedModelConfig = { id: m, thinking: false, stream: false };
+      for (const provider of providers) {
+        if (targetProvider) {
+          if (provider.name === targetProvider) {
+            matched = provider;
             break;
-          } else if (typeof m === 'object' && m.id === fModelName) {
-            fMatchedModelConfig = m;
+          }
+        } else {
+          if (provider.models && provider.models.some(m => (typeof m === 'string' ? m : m.id) === targetModel)) {
+            matched = provider;
             break;
           }
         }
       }
       
-      if (fMatched && fMatchedModelConfig) {
-        const fApiKeyEnv = fMatched.api_key_env || 'OPENAI_API_KEY';
-        const fApiKey = process.env[fApiKeyEnv] || '';
-        fallbackConfig = {
-          model: fMatchedModelConfig.id,
-          baseUrl: fMatched.base_url,
-          apiKey: fApiKey,
-          thinking: fMatchedModelConfig.thinking || false,
-          stream: fMatchedModelConfig.stream || false,
-        };
-        console.log(`[Agent] Fallback model configured: ${fallbackConfig.model} @ provider: ${fMatched.name}`);
+      if (matched && matched.models) {
+        for (const m of matched.models) {
+          if (typeof m === 'string' && m === targetModel) {
+            matchedModelConfig = { id: m, thinking: false, stream: false };
+            break;
+          } else if (typeof m === 'object' && m.id === targetModel) {
+            matchedModelConfig = m;
+            break;
+          }
+        }
       }
+      
+      if (!matchedModelConfig && matched?.models?.length > 0) {
+        const first = matched.models[0];
+        matchedModelConfig = typeof first === 'object' ? first : { id: first, thinking: false, stream: false };
+        targetModel = matchedModelConfig.id;
+      }
+      
+      if (!matched || !matchedModelConfig) return null;
+      
+      const apiKeyEnv = matched.api_key_env || 'OPENAI_API_KEY';
+      const apiKey = process.env[apiKeyEnv] || '';
+      
+      return {
+        model: matchedModelConfig.id,
+        baseUrl: matched.base_url,
+        apiKey: apiKey,
+        thinking: matchedModelConfig.thinking || false,
+        stream: matchedModelConfig.stream || false,
+        providerName: matched.name
+      };
+    };
+    
+    const resolvedPrimaryConfigs = [];
+    for (const val of defaultVals) {
+       const cfg = resolveModel(val);
+       if (cfg) resolvedPrimaryConfigs.push(cfg);
+    }
+    
+    // 兜底配置
+    if (resolvedPrimaryConfigs.length === 0) {
+       resolvedPrimaryConfigs.push({
+         model: 'gpt-4o',
+         baseUrl: 'https://api.openai.com/v1',
+         apiKey: process.env.OPENAI_API_KEY || '',
+         thinking: false,
+         stream: false,
+         providerName: 'openai'
+       });
+    }
+    
+    const resolvedFallbackConfigs = [];
+    for (const val of fallbackVals) {
+       const cfg = resolveModel(val);
+       if (cfg) resolvedFallbackConfigs.push(cfg);
+    }
+    
+    console.log(`[Agent] Primary models (round-robin): ${resolvedPrimaryConfigs.map(p => p.model).join(', ')}`);
+    if (resolvedFallbackConfigs.length > 0) {
+      console.log(`[Agent] Fallback models configured: ${resolvedFallbackConfigs.map(f => f.model).join(', ')}`);
     }
 
-    // 获取系统提示词
     const systemPrompt = this.config.agent?.system_prompt;
-
+    
     return {
       name: this.config.agent?.name || 'mimi',
-      model: modelName,
-      baseUrl: matched.base_url,
-      apiKey: apiKey,
-      thinking: matchedModelConfig.thinking || false,
-      stream: matchedModelConfig.stream || false,
-      systemPrompt: systemPrompt,
-      fallback: fallbackConfig
+      primaryConfigs: resolvedPrimaryConfigs,
+      fallbackConfigs: resolvedFallbackConfigs,
+      systemPrompt: systemPrompt
     };
   }
 

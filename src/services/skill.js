@@ -116,6 +116,19 @@ class SkillService {
   }
 
   /**
+   * 获取技能的提示词内容
+   */
+  async getSkillPrompt(name) {
+    const foundPath = await this._resolveSkillPath(name);
+    if (foundPath && foundPath.endsWith('.md')) {
+      const rawContent = await fs.readFile(foundPath, 'utf8');
+      const { content } = this._parseFrontmatter(rawContent);
+      return content;
+    }
+    return null;
+  }
+
+  /**
    * 执行指定技能
    */
   async run(name, params = {}, agent) {

@@ -46,7 +46,6 @@ memory:
 models:
   default:
     - "huoshan/GLM-5.1"
-    - "moda/deepseek-ai/DeepSeek-V4-Flash"
   fallback: "nvidia/openai/gpt-oss-120b"
   providers:
     - name: nvidia
@@ -68,6 +67,9 @@ models:
       api_key_env: "MODA_API_KEY"
       models:
         - id: "deepseek-ai/DeepSeek-V4-Flash"
+          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
+          stream: true      # 是否开启流式输出
+        - id: "inclusionAI/Ling-2.6-1T"
           thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
           stream: true      # 是否开启流式输出
 

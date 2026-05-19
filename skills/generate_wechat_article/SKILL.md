@@ -1,5 +1,5 @@
 ---
-name: 生成微信公众号文章
+name: generate_wechat_article
 description: 根据给定主题自动撰写微信公众号文章，并利用API接口自动上传封面图片、将图文内容一键保存至微信草稿箱的自动化技能。
 ---
 

@@ -968,28 +968,89 @@ class CoreAgent {
   }
 
   _normalizeMessages(history) {
-    const messages = [];
-    for (const msg of history) {
-      if (msg.tool_calls) {
-        messages.push({
-          role: msg.role,
-          content: msg.content || null,
-          tool_calls: msg.tool_calls,
-        });
-      } else if (msg.tool_call_id) {
-        messages.push({
-          role: 'tool',
-          tool_call_id: msg.tool_call_id,
-          content: msg.content,
-        });
+    const result = [];
+    for (let i = 0; i < history.length; i++) {
+      const msg = history[i];
+
+      // 检查助手消息是否包含工具调用
+      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+        const callIds = msg.tool_calls.map(tc => tc.id);
+        const toolMsgs = [];
+        let j = i + 1;
+
+        // 查找紧随其后的所有工具响应消息
+        while (j < history.length && (history[j].role === 'tool' || history[j].tool_call_id)) {
+          if (callIds.includes(history[j].tool_call_id)) {
+            toolMsgs.push(history[j]);
+          }
+          j++;
+        }
+
+        // 只有当所有工具调用都有对应的响应时，才保留这一段
+        if (toolMsgs.length === callIds.length) {
+          result.push({
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.tool_calls,
+          });
+          for (const tm of toolMsgs) {
+            result.push({
+              role: 'tool',
+              tool_call_id: tm.tool_call_id,
+              content: tm.content,
+            });
+          }
+          i = j - 1; // 跳过已处理的消息
+        } else {
+          console.warn(`[CoreAgent] 检测到不完整的工具调用序列（索引 ${i}），已跳过以防止 API 错误。`);
+          // 跳过该助手消息及后续不完整的工具消息
+          i = j - 1;
+        }
+      } else if (msg.role === 'tool' || msg.tool_call_id) {
+        // 孤立的工具消息，跳过
+        console.warn(`[CoreAgent] 检测到孤立的工具响应消息（索引 ${i}），已跳过。`);
       } else {
-        messages.push({
+        // 普通用户/助手消息
+        result.push({
           role: msg.role,
           content: msg.content || '',
         });
       }
     }
-    return messages;
+    return result;
+  }
+
+  /**
+   * 清理原始历史记录中的不完整工具调用序列（用于持久化存储前的净化）
+   * 与 _normalizeMessages 不同，保留所有字段（如 reasoning_content）
+   */
+  _cleanHistory(history) {
+    const result = [];
+    for (let i = 0; i < history.length; i++) {
+      const msg = history[i];
+      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+        const callIds = msg.tool_calls.map(tc => tc.id);
+        let j = i + 1;
+        const toolMsgs = [];
+        while (j < history.length && (history[j].role === 'tool' || history[j].tool_call_id)) {
+          if (callIds.includes(history[j].tool_call_id)) toolMsgs.push(history[j]);
+          j++;
+        }
+        if (toolMsgs.length === callIds.length) {
+          result.push(msg);
+          for (const tm of toolMsgs) result.push(tm);
+        } else {
+          console.warn(`[CoreAgent] _cleanHistory: 跳过不完整工具调用（索引 ${i}，期望 ${callIds.length} 个响应，实际 ${toolMsgs.length} 个）`);
+        }
+        i = j - 1;
+      } else if (msg.role === 'tool' || msg.tool_call_id) {
+        // 孤立的 tool 消息，跳过
+        console.warn(`[CoreAgent] _cleanHistory: 跳过孤立工具响应（索引 ${i}）`);
+      } else {
+        result.push(msg);
+      }
+    }
+    return result;
   }
 
   async _saveSession(sessionId, history) {
@@ -1035,19 +1096,41 @@ class CoreAgent {
       return { ...result, command: 'context' };
     }
 
-    if (!this._sessions[sessionId]) {
+     if (!this._sessions[sessionId]) {
       this._sessions[sessionId] = await this._loadSession(sessionId);
     }
 
-    const history = this._sessions[sessionId];
-    history.push({ role: 'user', content: prompt });
+    // 使用副本进行操作，防止执行中途出错导致内存中的会话历史被破坏
+    const historyCopy = [...this._sessions[sessionId]];
+    historyCopy.push({ role: 'user', content: prompt });
 
     const maxLen = this.maxContextTurns * 2;
-    this._sessions[sessionId] = this._trimHistory(history, maxLen);
-    const trimmedHistory = this._sessions[sessionId];
+    // _cleanHistory 先净化历史（去除磁盘上遗留的不完整 tool_call 序列），再裁剪长度
+    const cleanedHistory = this._cleanHistory(this._trimHistory(historyCopy, maxLen));
+    const workingHistory = cleanedHistory;
 
     let systemPrompt = await this._buildSystemPrompt();
     let ctx = await this._loadMemoryContext();
+
+    // 动态注入技能提示词 (按需注入)
+    if (this._skillService) {
+      try {
+        const skills = await this._skillService.list();
+        for (const skill of skills) {
+          // 如果用户输入包含技能名称，或者 options 中指定了目标技能
+          if (prompt.includes(skill.name) || (options.targetSkill === skill.name)) {
+            const skillPrompt = await this._skillService.getSkillPrompt(skill.name);
+            if (skillPrompt) {
+              systemPrompt += `\n\n## 技能 [${skill.name}] 规范\n${skillPrompt}`;
+              console.log(`[CoreAgent] 动态注入技能提示词: ${skill.name}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[CoreAgent] 动态注入技能提示词失败: ${e.message}`);
+      }
+    }
+
     if (options.appendSystemPrompt) {
       ctx = ctx ? `${ctx}\n${options.appendSystemPrompt}` : options.appendSystemPrompt;
     }
@@ -1060,9 +1143,9 @@ class CoreAgent {
     // 打印会话上下文日志
     console.log(`\n[CoreAgent] === Session Context [${sessionId}] ===`);
     console.log(`[CoreAgent] System Prompt: ${systemPrompt.substring(0, 200)}...`);
-    console.log(`[CoreAgent] History Length: ${trimmedHistory.length} messages`);
+    console.log(`[CoreAgent] History Length: ${workingHistory.length} messages`);
 
-    messages.push(...this._normalizeMessages(trimmedHistory));
+    messages.push(...this._normalizeMessages(workingHistory));
 
     const tools = await this._getAllTools(options.toolFilter);
     let finalResponse = '';
@@ -1184,7 +1267,7 @@ class CoreAgent {
         }));
       }
 
-      trimmedHistory.push(msgToStore);
+      workingHistory.push(msgToStore);
       messages.push(msgToStore);
 
       // 思考模式：输出 reasoning 日志
@@ -1213,7 +1296,7 @@ class CoreAgent {
           console.log(`[CoreAgent] 工具: ${tc.function.name} → ${displayResult.substring(0, 80)}`);
 
           const toolResult = { role: 'tool', tool_call_id: tc.id, content: displayResult };
-          trimmedHistory.push(toolResult);
+          workingHistory.push(toolResult);
           messages.push(toolResult);
         }
         continue;
@@ -1223,7 +1306,9 @@ class CoreAgent {
       }
     }
 
-    await this._saveSession(sessionId, trimmedHistory);
+    // 执行成功，更新内存会话状态并保存
+    this._sessions[sessionId] = workingHistory;
+    await this._saveSession(sessionId, workingHistory);
 
     return this.parseOutput(finalResponse);
   }

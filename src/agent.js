@@ -59,8 +59,11 @@ class SmartHomeAgent {
     console.log(`[Agent] Workspace: ${workspaceDir}`);
 
     // 4. 初始化技能服务
+    console.log('[Agent] Initializing SkillService...');
     this.skill = new SkillService(this.config.agent?.skills);
     await this.skill.init();
+    const loadedSkills = await this.skill.list();
+    console.log(`[Agent] SkillService initialized. ${loadedSkills.length} skill(s) loaded: ${loadedSkills.map(s => s.name).join(', ')}`);
     this.agent.setSkill(this.skill);
 
     // 4. 初始化调度器

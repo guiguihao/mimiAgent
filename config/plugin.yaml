@@ -15,3 +15,8 @@ plugins:
     enabled: true
     config_path: "./config/mcporter.json"
     timeout: 30000
+
+  # WebUI 控制台插件
+  webui:
+    enabled: true
+    port: 8080

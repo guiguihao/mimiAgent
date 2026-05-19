@@ -11,6 +11,7 @@ import SkillService from './services/skill.js';
 import WorkflowService from './services/workflow.js';
 import FeishuService from '../plugin/feishu.js';
 import MCPorterService from '../plugin/mcporter.js';
+import WebUIService from '../plugin/webui.js';
 
 
 // 加载环境变量
@@ -31,6 +32,7 @@ class SmartHomeAgent {
     this.skill = null;     // 技能服务
     this.workflow = null;  // 工作流服务
     this.feishu = null;
+    this.webui = null;
   }
 
   /**
@@ -113,6 +115,11 @@ class SmartHomeAgent {
     // MCPorter 在 start() 阶段才完全就绪，broadcast 也在 start() 后注入
     this.agent.setWorkflow(this.workflow);
 
+    // 9. 初始化 WebUI 服务
+    if (this.config.plugins?.webui?.enabled) {
+      this.webui = new WebUIService(this.config.plugins.webui, this);
+    }
+
     console.log('[Agent] Initialized');
   }
 
@@ -152,6 +159,11 @@ class SmartHomeAgent {
       });
     }
 
+    // 7. 启动 WebUI 服务
+    if (this.webui) {
+      await this.webui.start();
+    }
+
     console.log('[Agent] mimi is running...');
     console.log('[Agent] Press Ctrl+C to stop');
   }
@@ -173,6 +185,11 @@ class SmartHomeAgent {
     // 停止 MCPorter 服务
     if (this.mcporter) {
       await this.mcporter.stop();
+    }
+
+    // 停止 WebUI 服务
+    if (this.webui) {
+      await this.webui.stop();
     }
 
     console.log('[Agent] Stopped');

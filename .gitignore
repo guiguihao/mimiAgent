@@ -24,3 +24,4 @@ mcp/ureal_mcp/smarthome_logs_*
 mcp/ureal_mcp/smarthome_state.db
 *__pycache__*
 requirements.txt
+mcp/

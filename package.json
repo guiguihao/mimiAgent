@@ -23,7 +23,9 @@
   "license": "MIT",
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.60.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
+    "express": "^5.2.1",
     "mcporter": "^0.8.1",
     "node-cron": "^3.0.3",
     "openai": "^4.30.0",

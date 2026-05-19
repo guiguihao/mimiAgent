@@ -204,6 +204,34 @@ class MCPorterService {
   getToolMap() {
     return this.toolMap;
   }
+
+  /**
+   * 直接调用指定 server 的工具，不依赖 toolMap（适用于 enabled:false 的 server）
+   * @param {string} serverName - mcporter.json 中的 server key，如 'miot-mcp'
+   * @param {string} toolName   - 工具原始名，如 'prepare_login'
+   * @param {object} args       - 工具参数
+   */
+  async callToolDirect(serverName, toolName, args = {}) {
+    if (!this.config) {
+      throw new Error('[MCPorter] Config not loaded yet. Is MCPorter started?');
+    }
+
+    try {
+      const result = await callOnce({
+        server: serverName,
+        toolName,
+        args,
+        config: this.config,
+        rootDir: this.rootDir,
+      });
+
+      if (result && typeof result.text === 'function') return result.text();
+      if (typeof result === 'string') return result;
+      return JSON.stringify(result, null, 2);
+    } catch (err) {
+      throw new Error(`callToolDirect(${serverName}/${toolName}) failed: ${err.message}`);
+    }
+  }
 }
 
 export default MCPorterService;

@@ -1,19 +1,17 @@
-# mimi Agent 基础配置
-
 agent:
   name: "mimi"
   version: "1.0.0"
-  workspace: "./workspace"   # 工作目录：AI 生成的图片、文件、报告等存放位置
+  workspace: "./workspace"
   system_prompt: |
     你是一个极其聪明、动作果断且多才多艺的通用 AI 助手，名叫 "{name}"。
     你帮助用户处理各种日常任务、自动化工作流、搜索信息并执行复杂的计算机操作。
-
+    
     ### 行动准则
     1. **探测优先**：如果用户的意图涉及查询，严禁反向询问用户。你拥有工具，应该立即调用工具自助查询。
     2. **拒绝平庸**：不要做只会复读的机器人。你的价值在于通过后台操作减少用户的认知负担。
     3. **静默多步执行**：如果一个任务需要多步，请在一次回复前连续调用所有必要工具，直接汇报最终结果。
     4. **歧义处理**：只有当工具返回依然存在无法确定的多项选择时，才礼貌地请用户选择。
-
+    
     ### 你的能力
     1. 定时任务 (Cron)：mgmt_cron_list / mgmt_cron_add / mgmt_cron_remove / mgmt_cron_toggle
     2. 心跳巡检 (Heartbeat)：mgmt_heartbeat_get / mgmt_heartbeat_set
@@ -22,30 +20,29 @@ agent:
     5. 网页搜索 (Web Search)：baidu-search (优先使用)
     6. 工作流 (Workflow)：workflow_list / workflow_get / workflow_save / workflow_delete / workflow_reload / workflow_run
     7. 任务清单 (Task List)：tasktodolist（用于管理和拆解复杂任务，维护多个独立的待办列表，确保长周期任务不遗漏,每完成一个任务必须检查任务清单，看是否有需要跟进的任务）
-
+    
     ### 工作目录
     你生成的所有文件（图片、报告、数据、脚本等）请保存到工作目录：{workspace}
     示例：保存图片时使用 cmd_exec 将文件写入 {workspace}/images/，保存报告写入 {workspace}/reports/
-
+    
     ### readme
     {readme.md}
     ### 当前时间
     {time}
-
+    
     请开始你的服务。少说话，多干活。
-
-# 记忆系统配置
+    
 memory:
   directory: "./memory"
-  user_profile: "USER_PROFILE.md"    # 用户偏好与画像
-  knowledge: "KNOWLEDGE.md"         # 长期知识库与经验
-  facts: "FACTS.md"                 # 事实记录与重要数据
-  context: "CONTEXT.md"             # 当前上下文与即时背景信息
+  user_profile: "USER_PROFILE.md"
+  knowledge: "KNOWLEDGE.md"
+  facts: "FACTS.md"
+  context: "CONTEXT.md"
 
 # 模型配置 
 models:
   default:
-    - "huoshan/GLM-5.1"
+    - nvidia/openai/gpt-oss-120b
   fallback: "nvidia/openai/gpt-oss-120b"
   providers:
     - name: nvidia
@@ -53,25 +50,22 @@ models:
       api_key_env: "NVIDIA_API_KEY"
       models:
         - id: "openai/gpt-oss-120b"
-          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
-          stream: true      # 是否开启流式输出
+          thinking: true
+          stream: true
     - name: huoshan
       base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
       api_key_env: "VOLCENGINE_API_KEY"
       models:
         - id: "GLM-5.1"
-          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
-          stream: true      # 是否开启流式输出
+          thinking: true
+          stream: true
     - name: moda
       base_url: "https://mota.guiguihao.cc.cd/v1"
       api_key_env: "MODA_API_KEY"
       models:
         - id: "deepseek-ai/DeepSeek-V4-Flash"
-          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
-          stream: true      # 是否开启流式输出
+          thinking: true
+          stream: true
         - id: "inclusionAI/Ling-2.6-1T"
-          thinking: true    # 是否开启思考模式 (extended thinking / reasoning)
-          stream: true      # 是否开启流式输出
-
-
-  
+          thinking: true
+          stream: true

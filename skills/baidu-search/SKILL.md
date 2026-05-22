@@ -2,6 +2,17 @@
 name: baidu-search
 description: Search the web using Baidu AI Search Engine (BDSE). Use for live information, documentation, or research topics.
 metadata: { "openclaw": { "emoji": "🔍︎",  "requires": { "bins": ["python3"]} }}
+parameters:
+  type: object
+  properties:
+    query:
+      type: string
+      description: "Search query"
+    search_recency_filter:
+      type: string
+      description: "Time filter: week, month, semiyear, year"
+      enum: ["week", "month", "semiyear", "year"]
+  required: ["query"]
 ---
 
 # Baidu Search

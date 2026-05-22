@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'yaml';
 import os from 'os';
+import { log } from 'console';
 
 class WebUIService {
   constructor(config, agentInstance) {
@@ -19,6 +20,61 @@ class WebUIService {
   }
 
   setupRoutes() {
+    // ──────────────────────────────────────────
+    // 获取本地文件 (用于前端渲染图片)
+    // ──────────────────────────────────────────
+    this.app.get('/api/file', async (req, res) => {
+      try {
+        const filePath = req.query.path;
+        if (!filePath) return res.status(400).json({ error: 'Path is required' });
+
+        const resolvedPath = path.resolve(filePath);
+        const homeDir = os.homedir();
+        const workspaceDir = path.resolve(process.cwd(), 'workspace');
+        const miotMcpDir = path.resolve(homeDir, '.miot-mcp');
+
+        const isAllowed = resolvedPath.startsWith(workspaceDir) || 
+                          resolvedPath.startsWith(miotMcpDir) ||
+                          resolvedPath.startsWith(path.resolve(process.cwd()));
+
+        if (!isAllowed) {
+          console.warn(`[WebUI] Blocked unauthorized file access attempt: ${resolvedPath}`);
+          return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        console.log(`[WebUI] Serving file: ${resolvedPath}`);
+        console.log(`[WebUI] OS homedir: ${homeDir}, miotMcpDir: ${miotMcpDir}, isAllowed: ${isAllowed}`);
+        
+        const ext = path.extname(resolvedPath).toLowerCase();
+        let contentType = 'application/octet-stream';
+        if (ext === '.png') contentType = 'image/png';
+        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+        else if (ext === '.gif') contentType = 'image/gif';
+        else if (ext === '.webp') contentType = 'image/webp';
+        else if (ext === '.svg') contentType = 'image/svg+xml';
+        else if (ext === '.html') contentType = 'text/html';
+        else if (ext === '.json') contentType = 'application/json';
+        else if (ext === '.txt') contentType = 'text/plain';
+        else if (ext === '.md') contentType = 'text/markdown';
+
+        try {
+          const data = await fs.readFile(resolvedPath);
+          res.setHeader('Content-Type', contentType);
+          res.send(data);
+          console.log(`[WebUI] Successfully sent file via fs.readFile: ${resolvedPath}`);
+        } catch (fileErr) {
+          console.error(`[WebUI] fs.readFile error for ${resolvedPath}:`, fileErr);
+          res.status(fileErr.code === 'ENOENT' ? 404 : 500).json({ 
+            error: fileErr.message,
+            code: fileErr.code 
+          });
+        }
+      } catch (err) {
+        console.error('[WebUI] /api/file error:', err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // ──────────────────────────────────────────
     // 获取配置
     // ──────────────────────────────────────────
@@ -272,6 +328,7 @@ class WebUIService {
     // miot-mcp 登录 — 直接调用 mcporter.callTool，无需走 LLM
     this.app.post('/api/mcp/miot-login', async (req, res) => {
       try {
+
         const mcporter = this.agentInstance.mcporter;
         if (!mcporter) {
           return res.status(503).json({ error: 'MCPorter service not running. Make sure miot-mcp is enabled.' });
@@ -285,41 +342,42 @@ class WebUIService {
         try { await fs.unlink(qrHtmlPath); } catch (e) { /* ignore */ }
 
         const servers = mcporter.runtime ? mcporter.runtime.listServers() : [];
-        let result;
-        if (servers.includes('miot-mcp')) {
-          console.log('[WebUI] Calling prepare_login on persistent miot-mcp server...');
-          const rawResult = await mcporter.runtime.callTool('miot-mcp', 'prepare_login', {
-            args: { force_reauth: true, reopen_qr: true }
-          });
-          console.log('[WebUI] Finished calling prepare_login on persistent server.');
-          if (rawResult && typeof rawResult.text === 'function') {
-            result = rawResult.text();
-          } else if (typeof rawResult === 'string') {
-            result = rawResult;
-          } else {
-            result = JSON.stringify(rawResult, null, 2);
-          }
-        } else {
-          console.log('[WebUI] Calling prepare_login via fallback callOnce...');
-          result = await mcporter.callToolDirect('miot-mcp', 'prepare_login', {
-            force_reauth: true,
-            reopen_qr: true,
-          });
-          console.log('[WebUI] Finished calling prepare_login via fallback.');
-        }
-        console.log('[WebUI] prepare_login result:', result);
+        let result = 'Tool call running in background';
 
-        // 轮询等待文件写入（最多 20 秒，因为启动浏览器拉取二维码需要时间）
+        // 异步执行调用，防止底层进程卡死阻塞响应
+        const toolPromise = (async () => {
+          if (servers.includes('miot-mcp')) {
+            console.log('[WebUI] Calling prepare_login on persistent miot-mcp server...');
+            await mcporter.runtime.callTool('miot-mcp', 'prepare_login', {
+              args: { force_reauth: true, reopen_qr: true }
+            });
+            console.log('[WebUI] Finished calling prepare_login on persistent server.');
+          } else {
+            console.log('[WebUI] Calling prepare_login via fallback callOnce...');
+            await mcporter.callToolDirect('miot-mcp', 'prepare_login', {
+              force_reauth: true,
+              reopen_qr: true,
+            });
+            console.log('[WebUI] Finished calling prepare_login via fallback.');
+          }
+        })().catch(err => console.error('[WebUI] prepare_login error:', err));
+
+        console.log('[WebUI] Started toolPromise in background, now polling for QR code...');
+
+        // 轮询等待文件写入（最多 60 秒，因为远程服务器拉取二维码网络可能较慢）
         let imgBase64 = null;
         let generatedAt = null;
-        for (let i = 0; i < 40; i++) {
+        console.log(`[WebUI] Polling for QR code at: ${qrPath}`);
+        for (let i = 0; i < 120; i++) {
           try {
             const buf = await fs.readFile(qrPath);
-            imgBase64 = `data:image/png;base64,${buf.toString('base64')}`;
-            const stats = await fs.stat(qrPath);
-            generatedAt = stats.mtime.toLocaleString();
-            console.log(`[WebUI] Success reading QR code on attempt ${i + 1}`);
-            break;
+            if (buf.length > 50) { // 确保文件已被完整写入
+              imgBase64 = `data:image/png;base64,${buf.toString('base64')}`;
+              const stats = await fs.stat(qrPath);
+              generatedAt = stats.mtime.toLocaleString();
+              console.log(`[WebUI] Success reading QR code on attempt ${i + 1}`);
+              break;
+            }
           } catch {
             await new Promise(r => setTimeout(r, 500));
           }
@@ -450,18 +508,39 @@ class WebUIService {
     // ──────────────────────────────────────────
     this.app.post('/api/chat', async (req, res) => {
       try {
-        const { message, sessionId } = req.body;
+        const { message, sessionId, stream } = req.body;
         if (!message) return res.status(400).json({ error: 'Message is required' });
+
+        // 设置 SSE 响应头
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        const sendEvent = (data) => {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
 
         const result = await this.agentInstance.thinkAndAct(message, {
           sessionId: sessionId || 'webui_default',
+          stream: stream !== undefined ? stream : true,
+          onStream: (event) => {
+            sendEvent(event);
+          }
         });
 
         const reply = result?.reply || result?.response
           || (typeof result === 'string' ? result : '执行完毕，未返回特定内容。');
-        res.json({ reply });
+        sendEvent({ type: 'done', reply });
+        res.end();
       } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[WebUI] Chat stream error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: err.message });
+        } else {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+          res.end();
+        }
       }
     });
   }

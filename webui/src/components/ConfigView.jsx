@@ -46,10 +46,10 @@ function ModelSelect({ name, value, providers = [], onChange, allowEmpty = false
 
 
 const MEMORY_FILES = [
-  { key: 'user_profile', label: 'User Profile',    desc: '用户偏好与画像' },
-  { key: 'knowledge',    label: 'Knowledge',       desc: '长期知识库与经验' },
-  { key: 'facts',        label: 'Facts',           desc: '事实记录与重要数据' },
-  { key: 'context',      label: 'Context',         desc: '当前上下文与即时背景信息' },
+  { key: 'user_profile', label: 'User Profile', desc: '用户偏好与画像' },
+  { key: 'knowledge', label: 'Knowledge', desc: '长期知识库与经验' },
+  { key: 'facts', label: 'Facts', desc: '事实记录与重要数据' },
+  { key: 'context', label: 'Context', desc: '当前上下文与即时背景信息' },
 ]
 
 export default function ConfigView() {
@@ -60,11 +60,11 @@ export default function ConfigView() {
   const [expandedProvider, setExpandedProvider] = useState(null)
 
   // Memory editor state
-  const [memEditor, setMemEditor]     = useState(null)  // { key, filename, label }
-  const [memContent, setMemContent]   = useState('')
-  const [memSaving, setMemSaving]     = useState(false)
-  const [memLoading, setMemLoading]   = useState(false)
-  const [memSaveMsg, setMemSaveMsg]   = useState('')
+  const [memEditor, setMemEditor] = useState(null)  // { key, filename, label }
+  const [memContent, setMemContent] = useState('')
+  const [memSaving, setMemSaving] = useState(false)
+  const [memLoading, setMemLoading] = useState(false)
+  const [memSaveMsg, setMemSaveMsg] = useState('')
 
   useEffect(() => {
     fetch('/api/config')
@@ -117,9 +117,9 @@ export default function ConfigView() {
   }
 
   // ── Env vars state ──
-  const [envLines, setEnvLines]     = useState([])
+  const [envLines, setEnvLines] = useState([])
   const [envLoading, setEnvLoading] = useState(false)
-  const [envSaving, setEnvSaving]   = useState(false)
+  const [envSaving, setEnvSaving] = useState(false)
   const [envSaveMsg, setEnvSaveMsg] = useState('')
   const [hiddenKeys, setHiddenKeys] = useState({})
 
@@ -129,7 +129,7 @@ export default function ConfigView() {
       const res = await fetch('/api/env')
       const data = await res.json()
       setEnvLines(data.lines || [])
-    } catch(e) { console.error(e) }
+    } catch (e) { console.error(e) }
     finally { setEnvLoading(false) }
   }
 
@@ -144,7 +144,7 @@ export default function ConfigView() {
       })
       const data = await res.json()
       setEnvSaveMsg(data.success ? '✓ Saved' : `Error: ${data.error}`)
-    } catch(err) {
+    } catch (err) {
       setEnvSaveMsg(`Error: ${err.message}`)
     } finally {
       setEnvSaving(false)
@@ -284,7 +284,7 @@ export default function ConfigView() {
               </div>
               <div className="form-group flex-1">
                 <label className="form-label">Workspace Path</label>
-                <input type="text" name="workspace" value={config.workspace} onChange={handleAgentChange} className="form-input" />
+                <input type="text" name="workspace" value={config.workspace} onChange={handleAgentChange} className="form-input" disabled />
               </div>
             </div>
             <div className="form-row">

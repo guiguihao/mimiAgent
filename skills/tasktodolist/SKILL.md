@@ -1,3 +1,25 @@
+---
+name: tasktodolist
+description: A CLI-based task/todo list manager. Allows you to maintain multiple independent to-do lists by specifying a task name. Use it to add, list, complete, or remove tasks.
+parameters:
+  type: object
+  properties:
+    action:
+      type: string
+      description: "要执行的操作: add, list, done, rm, clear, tasks_list, tasks_rm"
+      enum: ["add", "list", "done", "rm", "clear", "tasks_list", "tasks_rm"]
+    task:
+      type: string
+      description: "任务列表名称 (对应 -t 参数)。如果未提供，则使用 default 列表"
+    content:
+      type: string
+      description: "当 action 为 add 时，待办的具体内容 (或 tasks_rm 时的目标列表名称)"
+    index:
+      type: number
+      description: "当 action 为 done 或 rm 时的待办项目序号"
+  required: ["action"]
+---
+
 # tasktodolist Skill
 
 ## 描述

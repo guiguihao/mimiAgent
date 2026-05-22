@@ -333,31 +333,8 @@ class CoreAgent {
 
     // 技能工具
     if (this._skillService) {
-      // 1. 保留基础技能管理工具
+      // 1. 保留底层系统交互指令 (cmd_exec)
       tools.push(
-        {
-          type: 'function',
-          function: {
-            name: 'skill_list',
-            description: '获取当前可用的技能列表',
-            parameters: { type: 'object', properties: {}, required: [] },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'skill_run',
-            description: '执行指定的技能',
-            parameters: {
-              type: 'object',
-              properties: {
-                name: { type: 'string', description: '技能名称' },
-                params: { type: 'object', description: '传递给技能的参数（可选）' },
-              },
-              required: ['name'],
-            },
-          },
-        },
         {
           type: 'function',
           function: {
@@ -381,20 +358,23 @@ class CoreAgent {
         const skillList = await this._skillService.list();
         for (const skill of skillList) {
           // 避免与内置工具冲突
-          if (['skill_list', 'skill_run', 'cmd_exec'].includes(skill.name)) continue;
+          if (['cmd_exec'].includes(skill.name)) continue;
+
+          // 优先使用技能定义的 parameters，如果未定义则使用兜底 schema
+          const skillParameters = skill.parameters || {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: '传递给技能的参数说明，如搜索词或指令内容' },
+            },
+            additionalProperties: true,
+          };
 
           tools.push({
             type: 'function',
             function: {
               name: skill.name.replace(/-/g, '_'), // 统一使用下划线
               description: `[Skill] ${skill.description || skill.name}`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  query: { type: 'string', description: '搜索或执行所需的参数' },
-                },
-                additionalProperties: true, // 允许传递更多参数
-              },
+              parameters: skillParameters,
             },
           });
         }
@@ -517,8 +497,6 @@ class CoreAgent {
       return await this._handleFileTool(toolName, args);
     } else if (toolName.startsWith('cmd_')) {
       return await this._handleCommandTool(toolName, args);
-    } else if (toolName.startsWith('skill_')) {
-      return await this._handleSkillTool(toolName, args);
     }
 
     // 兜底：尝试作为动态映射的技能处理
@@ -611,30 +589,6 @@ class CoreAgent {
       }
     } catch (e) {
       return `工作流工具错误: ${e.message}`;
-    }
-  }
-
-  /**
-   * 处理技能工具调用
-   */
-  async _handleSkillTool(toolName, args = {}) {
-    if (!this._skillService) return '技能服务未配置';
-
-    try {
-      switch (toolName) {
-        case 'skill_list':
-          return await this._skillService.list();
-        case 'skill_run':
-          const result = await this._skillService.run(args.name, args.params || {}, this);
-          if (result && typeof result === 'object') {
-            return result.response || result.reply || JSON.stringify(result);
-          }
-          return String(result);
-        default:
-          return `未知技能工具: ${toolName}`;
-      }
-    } catch (error) {
-      return `执行技能工具失败: ${error.message}`;
     }
   }
 
@@ -1167,6 +1121,9 @@ class CoreAgent {
       console.log(`[CoreAgent] Round-robin selected primary model: ${this.model}`);
     }
 
+    // 缓存单次决策（决定）循环内的工具调用记录，用于检测和拦截无限重试/死循环
+    const executedToolCalls = new Map();
+
     for (let i = 0; i < this.maxToolIterations; i++) {
       const requestOptions = {
         model: this.model,
@@ -1185,18 +1142,30 @@ class CoreAgent {
         }
       }
 
-      // 流式输出模式
-      if (this.stream) {
+      // 根据是否流式选择不同的调用方式
+      const onChunk = options.onChunk || null;
+      const onStream = options.onStream || null;
+      const isStream = options.stream !== undefined ? options.stream : this.stream;
+
+      if (isStream) {
         requestOptions.stream = true;
       }
 
-      // 根据是否流式选择不同的调用方式
-      const onChunk = options.onChunk || null;
       let choice;
       try {
-        choice = this.stream
-          ? await this._handleStreamRequest(requestOptions, onChunk)
+        choice = isStream
+          ? await this._handleStreamRequest(requestOptions, onChunk, onStream)
           : await this._handleNormalRequest(requestOptions);
+
+        // 如果不是流式，手动把完整结果触发一次 onStream
+        if (!isStream && onStream) {
+          if (choice.reasoning_content) {
+            onStream({ type: 'reasoning', content: choice.reasoning_content });
+          }
+          if (choice.content) {
+            onStream({ type: 'content', content: choice.content });
+          }
+        }
       } catch (error) {
         if (this.fallbackConfigs && this.fallbackConfigs.length > 0) {
           console.warn(`[CoreAgent] Primary model (${this.model}) failed: ${error.message}. Trying fallbacks.`);
@@ -1222,12 +1191,23 @@ class CoreAgent {
               
               requestOptions.model = this.model;
               requestOptions.temperature = this.thinking ? 1 : 0.7;
-              requestOptions.stream = this.stream;
+
+              const isFallbackStream = options.stream !== undefined ? options.stream : this.stream;
+              requestOptions.stream = isFallbackStream;
               
               console.log(`[CoreAgent] Retrying with fallback model: ${this.model}`);
-              choice = this.stream
-                ? await this._handleStreamRequest(requestOptions, onChunk)
+              choice = isFallbackStream
+                ? await this._handleStreamRequest(requestOptions, onChunk, onStream)
                 : await this._handleNormalRequest(requestOptions);
+
+              if (!isFallbackStream && onStream) {
+                if (choice.reasoning_content) {
+                  onStream({ type: 'reasoning', content: choice.reasoning_content });
+                }
+                if (choice.content) {
+                  onStream({ type: 'content', content: choice.content });
+                }
+              }
                 
               console.log(`[CoreAgent] Fallback to ${this.model} successful. Keeping fallback model for remaining steps.`);
               success = true;
@@ -1284,13 +1264,51 @@ class CoreAgent {
             console.warn(`[CoreAgent] 工具参数解析失败: ${tc.function.name}, raw: ${tc.function.arguments}`);
           }
 
-          const result = await this._handleToolCall(tc.function.name, args);
-          let displayResult = typeof result === 'object' ? JSON.stringify(result) : String(result);
+          if (onStream) {
+            let parsedArgs = args;
+            try { parsedArgs = JSON.parse(tc.function.arguments); } catch { parsedArgs = args; }
+            onStream({
+              type: 'tool_start',
+              id: tc.id,
+              name: tc.function.name,
+              arguments: parsedArgs
+            });
+          }
 
-          // 限制工具输出长度，防止撑爆上下文 (约 20,000 字符)
-          if (displayResult.length > 20000) {
-            console.log(`[CoreAgent] 工具 ${tc.function.name} 输出过长 (${displayResult.length})，已截断`);
-            displayResult = displayResult.substring(0, 20000) + "\n\n(内容过长，已截断...)";
+          // 规范化参数的空白符，确保比对键稳定性
+          const callKey = `${tc.function.name}:${tc.function.arguments.replace(/\s+/g, '')}`;
+          let displayResult;
+
+          if (executedToolCalls.has(callKey)) {
+            const prev = executedToolCalls.get(callKey);
+            console.warn(`[CoreAgent] ⚠ 检测到在同一次决策循环中重复调用工具: ${tc.function.name}，进行拦截并直接返回先前结果`);
+            displayResult = prev.result;
+            // 如果上一次调用执行失败了，追加系统指令提示强力引导 LLM 停止无限重试并跳出循环
+            if (prev.isError && !displayResult.includes('【系统提示】')) {
+              displayResult += `\n\n【系统提示】该工具在此轮对话中已调用过且执行失败。严禁重复调用相同参数的相同工具！请仔细分析先前的错误原因，尝试其他合适的方法/工具，或直接向用户汇报该错误。`;
+            }
+          } else {
+            const result = await this._handleToolCall(tc.function.name, args);
+            displayResult = typeof result === 'object' ? JSON.stringify(result) : String(result);
+
+            // 限制工具输出长度，防止撑爆上下文 (约 20,000 字符)
+            if (displayResult.length > 20000) {
+              console.log(`[CoreAgent] 工具 ${tc.function.name} 输出过长 (${displayResult.length})，已截断`);
+              displayResult = displayResult.substring(0, 20000) + "\n\n(内容过长，已截断...)";
+            }
+
+            // 判断是否为错误或失败结果（匹配常见错误和 success: false 字样）
+            const isError = /error|failed|失败|错误|未登录|not connected|RuntimeError|success":\s*false/i.test(displayResult);
+            executedToolCalls.set(callKey, { isError, result: displayResult });
+          }
+
+          if (onStream) {
+            onStream({
+              type: 'tool_end',
+              id: tc.id,
+              name: tc.function.name,
+              result: displayResult
+            });
           }
 
           console.log(`[CoreAgent] 工具: ${tc.function.name} → ${displayResult.substring(0, 80)}`);
@@ -1333,9 +1351,10 @@ class CoreAgent {
    * 流式请求 — 逐 chunk 拼接 content / tool_calls / reasoning_content
    * @param {object} requestOptions - API 请求参数
    * @param {Function} [onChunk] - 可选回调，每收到一个 content chunk 就调用 onChunk(text)
+   * @param {Function} [onStream] - 可选流式事件回调
    * @returns {object} 解析后的 choice 数据 { role, content, tool_calls, reasoning_content }
    */
-  async _handleStreamRequest(requestOptions, onChunk) {
+  async _handleStreamRequest(requestOptions, onChunk, onStream) {
     const stream = await this.client.chat.completions.create(requestOptions);
 
     let content = '';
@@ -1348,8 +1367,18 @@ class CoreAgent {
       if (!delta) continue;
 
       if (delta.role) role = delta.role;
-      if (delta.content) content += delta.content;
-      if (delta.reasoning_content) reasoningContent += delta.reasoning_content;
+      if (delta.content) {
+        content += delta.content;
+        if (onStream) {
+          onStream({ type: 'content', content: delta.content });
+        }
+      }
+      if (delta.reasoning_content) {
+        reasoningContent += delta.reasoning_content;
+        if (onStream) {
+          onStream({ type: 'reasoning', content: delta.reasoning_content });
+        }
+      }
 
       // 流式 tool_calls 拼接
       if (delta.tool_calls) {

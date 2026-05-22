@@ -332,11 +332,15 @@ class WorkflowService {
   // ─── Utilities ──────────────────────────────────────────────────────────────
 
   /**
-   * 将字符串模板中的 ${varName} 替换为 ctx 中的值
+   * 将字符串模板中的 ${varName.subVar} 替换为 ctx 中的值
    */
   _resolveTemplate(str, ctx) {
-    return str.replace(/\$\{(\w+)\}/g, (match, key) => {
-      const val = ctx[key];
+    return str.replace(/\$\{(.+?)\}/g, (match, path) => {
+      const keys = path.trim().split('.');
+      let val = ctx;
+      for (const k of keys) {
+        val = val?.[k];
+      }
       if (val === undefined) return match;
       return typeof val === 'object' ? JSON.stringify(val) : String(val);
     });
@@ -373,17 +377,13 @@ class WorkflowService {
           val = val?.[k];
         }
         if (val === undefined || val === null) return 'null';
-        if (typeof val === 'string') return `"${val}"`;
+        // 使用 JSON.stringify 安全转义字符串，防止注入
+        if (typeof val === 'string') return JSON.stringify(val);
+        if (typeof val === 'object') return JSON.stringify(val);
         return String(val);
       });
 
-      // 简单的安全评估（仅允许数字、比较运算符、布尔值）
-      const safeExpr = resolved.replace(/[^0-9.<>=!&|() "'\tnull\-]/g, match => {
-        // 允许 true/false 关键字
-        if (/^(true|false|null|and|or|not)$/.test(match)) return match;
-        return '';
-      });
-
+      // 直接执行，因为 YAML 是系统配置，且变量已被 JSON.stringify 安全转义
       // eslint-disable-next-line no-new-func
       return Boolean(new Function(`"use strict"; return (${resolved})`)());
     } catch (e) {

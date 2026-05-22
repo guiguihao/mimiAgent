@@ -8,7 +8,7 @@
       ]
     },
     "miot-mcp": {
-      "enabled": false,
+      "enabled": true,
       "command": "python3",
       "args": [
         "../mcp/miot-mcp/mcp_server/mcp_server.py"

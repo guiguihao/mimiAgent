@@ -57,7 +57,8 @@ class SkillService {
             skills.push({
               name: metadata?.name || entry.name,
               description: metadata?.description || '',
-              type: 'md'
+              type: 'md',
+              parameters: metadata?.parameters || null
             });
           } else if (subFiles.includes('index.js')) {
             skills.push({ name: entry.name, type: 'js' });
@@ -162,11 +163,8 @@ ${content}
         return await agent.decide(prompt, {
           appendSystemPrompt: `你现在是 "${name}" 技能的执行专家。请严格按照手册通过 cmd_exec 完成任务，严禁二次调用技能工具。`,
           toolFilter: (tool) => {
-            // 严禁在技能内部调用 skill_run 或任何具体技能映射工具 (如 baidu_search)
-            const isSkillTool = tool.function.name === 'skill_run' ||
-              tool.function.name === 'skill_list' ||
-              tool.function.description?.includes('[Skill]');
-            return !isSkillTool;
+            // 严禁在技能内部再次调用其他技能（通过 [Skill] 描述前缀识别）
+            return !tool.function.description?.includes('[Skill]');
           }
         });
       }

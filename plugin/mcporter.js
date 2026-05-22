@@ -2,6 +2,25 @@ import { createRuntime, createServerProxy, callOnce } from 'mcporter';
 import path from 'path';
 
 /**
+ * 带有超时控制的 Promise 包装器
+ * @param {Promise} promise - 待执行的 Promise
+ * @param {number} timeoutMs - 超时时间（毫秒）
+ * @param {string} errorMsg - 超时错误信息
+ */
+function withTimeout(promise, timeoutMs, errorMsg = '操作超时') {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(errorMsg));
+    }, timeoutMs);
+  });
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    timeoutPromise
+  ]);
+}
+
+/**
  * MCPorter 插件 — MCP Server 客户端
  * 通过 mcporter 连接外部 MCP Server，动态发现工具并注入 CoreAgent
  *
@@ -141,8 +160,12 @@ class MCPorterService {
     const { server, toolName } = mapping;
 
     try {
-      // 方式1: 通过 runtime.callTool（标准 API）
-      const result = await this.runtime.callTool(server, toolName, { args });
+      // 方式1: 通过 runtime.callTool（标准 API），并包裹超时控制
+      const result = await withTimeout(
+        this.runtime.callTool(server, toolName, { args }),
+        this.timeout,
+        `MCP 工具调用超时 (${this.timeout}ms): ${toolPrefix}`
+      );
 
       // CallResult 对象有 .text() 方法；原始结果直接返回
       if (result && typeof result.text === 'function') {
@@ -159,14 +182,23 @@ class MCPorterService {
     } catch (error) {
       console.error(`[MCPorter] Call ${toolPrefix} error: ${error.message}`);
 
-      // 方式2: fallback 到 callOnce（独立连接，不依赖 runtime）
+      // 如果已经是超时错误，不要再次触发 fallback 尝试，直接返回超时错误
+      if (error.message.includes('超时')) {
+        return `MCP 工具调用失败: ${error.message}`;
+      }
+
+      // 方式2: fallback 到 callOnce（独立连接，不依赖 runtime），并包裹超时控制
       try {
-        const fallbackResult = await callOnce({
-          server,
-          toolName,
-          args,
-          config: this.config,
-        });
+        const fallbackResult = await withTimeout(
+          callOnce({
+            server,
+            toolName,
+            args,
+            config: this.config,
+          }),
+          this.timeout,
+          `MCP 工具调用超时 (${this.timeout}ms): ${toolPrefix} (fallback)`
+        );
 
         if (fallbackResult && typeof fallbackResult.text === 'function') {
           return fallbackResult.text();
@@ -176,7 +208,7 @@ class MCPorterService {
         }
         return JSON.stringify(fallbackResult, null, 2);
       } catch (fallbackError) {
-        return `MCP 工具调用失败: ${error.message}`;
+        return `MCP 工具调用失败: ${error.message} (Fallback error: ${fallbackError.message})`;
       }
     }
   }
@@ -217,13 +249,17 @@ class MCPorterService {
     }
 
     try {
-      const result = await callOnce({
-        server: serverName,
-        toolName,
-        args,
-        config: this.config,
-        rootDir: this.rootDir,
-      });
+      const result = await withTimeout(
+        callOnce({
+          server: serverName,
+          toolName,
+          args,
+          config: this.config,
+          rootDir: this.rootDir,
+        }),
+        this.timeout,
+        `MCP 工具直调超时 (${this.timeout}ms): ${serverName}/${toolName}`
+      );
 
       if (result && typeof result.text === 'function') return result.text();
       if (typeof result === 'string') return result;

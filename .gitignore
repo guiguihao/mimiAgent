@@ -25,3 +25,4 @@ mcp/ureal_mcp/smarthome_state.db
 *__pycache__*
 requirements.txt
 mcp/
+pnpm-lock.yaml

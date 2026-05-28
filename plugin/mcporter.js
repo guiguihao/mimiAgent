@@ -36,7 +36,7 @@ class MCPorterService {
     const relPath = config.config_path || './config/mcporter.json';
     this.configPath = path.resolve(process.cwd(), relPath);
     this.rootDir = config.root_dir || process.cwd();
-    this.timeout = config.timeout || 30000;
+    this.timeout = config.timeout || 10000;
 
     this.runtime = null;
     this.serverProxies = {};  // serverName → ServerProxy

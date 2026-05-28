@@ -1,5 +1,5 @@
 ---
-name: 生成Rin博客文章
+name: generaterin
 description: 根据给定主题自动撰写博客文章，并利用脚本接口自动上传封面图片、将Markdown内容一键发布或保存至Rin博客草稿箱的自动化技能。
 ---
 

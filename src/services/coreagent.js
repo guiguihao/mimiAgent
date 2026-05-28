@@ -372,7 +372,8 @@ class CoreAgent {
           tools.push({
             type: 'function',
             function: {
-              name: skill.name.replace(/-/g, '_'), // 统一使用下划线
+              // 统一使用下划线，并移除任何不符合 API 要求的非法字符 (^[a-zA-Z0-9_-]+$)
+              name: skill.name.replace(/-/g, '_').replace(/[^a-zA-Z0-9_-]/g, '_'),
               description: `[Skill] ${skill.description || skill.name}`,
               parameters: skillParameters,
             },
@@ -478,6 +479,24 @@ class CoreAgent {
       tools = tools.filter(filter);
     }
 
+    // 最终防御：确保所有工具名都符合 API 要求 (^[a-zA-Z0-9_-]+$)
+    // 将不合法字符替换为下划线，并移除首尾多余下划线
+    tools = tools.map(t => {
+      if (!t?.function?.name) return t;
+      const cleanedName = t.function.name
+        .replace(/[^a-zA-Z0-9_-]/g, '_') // 替换非法字符
+        .replace(/^_+|_+$/g, '')         // 移除首尾下划线
+        .replace(/__+/g, '_')            // 合并连续下划线
+        || 'tool';                       // 防止空名
+      if (cleanedName !== t.function.name) {
+        console.warn(`[CoreAgent] 工具名含非法字符已自动清理: "${t.function.name}" → "${cleanedName}"`);
+      }
+      return {
+        ...t,
+        function: { ...t.function, name: cleanedName },
+      };
+    });
+
     return tools;
   }
 
@@ -485,26 +504,29 @@ class CoreAgent {
    * 处理工具调用（异步）
    */
   async _handleToolCall(toolName, args = {}) {
-    if (toolName.startsWith('memory_')) {
-      return await this._handleMemoryTool(toolName, args);
-    } else if (toolName.startsWith('mgmt_')) {
-      return this._handleManagementTool(toolName, args);
-    } else if (toolName.startsWith('mcp_')) {
-      return await this._handleMCPToolCall(toolName, args);
-    } else if (toolName.startsWith('workflow_')) {
-      return await this._handleWorkflowTool(toolName, args);
-    } else if (toolName.startsWith('file_')) {
-      return await this._handleFileTool(toolName, args);
-    } else if (toolName.startsWith('cmd_')) {
-      return await this._handleCommandTool(toolName, args);
+    // 过滤掉可能由某些模型输出附加的特殊标记后缀 (如 <|channel|>commentary)
+    const cleanToolName = typeof toolName === 'string' ? toolName.replace(/<\|.*$/, '').trim() : toolName;
+
+    if (cleanToolName.startsWith('memory_')) {
+      return await this._handleMemoryTool(cleanToolName, args);
+    } else if (cleanToolName.startsWith('mgmt_')) {
+      return this._handleManagementTool(cleanToolName, args);
+    } else if (cleanToolName.startsWith('mcp_')) {
+      return await this._handleMCPToolCall(cleanToolName, args);
+    } else if (cleanToolName.startsWith('workflow_')) {
+      return await this._handleWorkflowTool(cleanToolName, args);
+    } else if (cleanToolName.startsWith('file_')) {
+      return await this._handleFileTool(cleanToolName, args);
+    } else if (cleanToolName.startsWith('cmd_')) {
+      return await this._handleCommandTool(cleanToolName, args);
     }
 
     // 兜底：尝试作为动态映射的技能处理
     if (this._skillService) {
       const skills = await this._skillService.list();
-      const targetSkill = skills.find(s => s.name.replace(/-/g, '_') === toolName);
+      const targetSkill = skills.find(s => s.name.replace(/-/g, '_') === cleanToolName);
       if (targetSkill) {
-        console.log(`[CoreAgent] 动态路由技能工具: ${toolName} -> ${targetSkill.name}`);
+        console.log(`[CoreAgent] 动态路由技能工具: ${cleanToolName} -> ${targetSkill.name}`);
         const result = await this._skillService.run(targetSkill.name, args, this);
 
         // 自动脱壳：如果返回的是 {response: '...'} 或 {reply: '...'}，只取内容
@@ -515,7 +537,7 @@ class CoreAgent {
       }
     }
 
-    return `未知工具: ${toolName}`;
+    return `未知工具: ${cleanToolName}`;
   }
 
   /**
@@ -1237,14 +1259,18 @@ class CoreAgent {
       }
 
       if (choice.tool_calls) {
-        msgToStore.tool_calls = choice.tool_calls.map(tc => ({
-          id: tc.id,
-          type: tc.type,
-          function: {
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-          },
-        }));
+        msgToStore.tool_calls = choice.tool_calls.map(tc => {
+          // 过滤掉可能由某些模型输出附加的特殊标记后缀 (如 <|channel|>commentary)
+          const cleanName = typeof tc.function.name === 'string' ? tc.function.name.replace(/<\|.*$/, '').trim() : tc.function.name;
+          return {
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: cleanName,
+              arguments: tc.function.arguments,
+            },
+          };
+        });
       }
 
       workingHistory.push(msgToStore);

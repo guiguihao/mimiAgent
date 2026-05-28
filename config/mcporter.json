@@ -1,14 +1,14 @@
 {
   "mcpServers": {
     "ureal-mcp": {
-      "enabled": false,
+      "enabled": true,
       "command": "python3",
       "args": [
-        "../mcp/ureal_mcp/server.py"
+        "../mcp/ureal-mcp/server.py"
       ]
     },
     "miot-mcp": {
-      "enabled": true,
+      "enabled": false,
       "command": "python3",
       "args": [
         "../mcp/miot-mcp/mcp_server/mcp_server.py"

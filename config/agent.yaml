@@ -38,7 +38,10 @@ memory:
 # 模型配置 
 models:
   default:
-    - nvidia/openai/gpt-oss-120b
+    - openrouter/nvidia/nemotron-3-super-120b-a12b:free
+    - openrouter1/nvidia/nemotron-3-super-120b-a12b:free
+    - openrouter2/nvidia/nemotron-3-super-120b-a12b:free
+    - openrouter3/nvidia/nemotron-3-super-120b-a12b:free
   fallback: "nvidia/openai/gpt-oss-120b"
   providers:
     - name: nvidia
@@ -63,5 +66,43 @@ models:
           thinking: true
           stream: true
         - id: "inclusionAI/Ling-2.6-1T"
+          thinking: true
+          stream: true
+    - name: ds2api
+      base_url: "http://127.0.0.1:5001/v1"
+      api_key_env: "ds2api_API_KEY"
+      models:
+        - id: "deepseek-v4-flash-nothinking"
+          thinking: true
+          stream: true
+        - id: "deepseek-v4-flash-search-nothinking"
+          thinking: true
+          stream: true
+    - name: openrouter
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "openrouter_API_KEY"
+      models:
+        - id: "nvidia/nemotron-3-super-120b-a12b:free"
+          thinking: true
+          stream: true
+    - name: openrouter1
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "openrouter_API_KEY1"
+      models:
+        - id: "nvidia/nemotron-3-super-120b-a12b:free"
+          thinking: true
+          stream: true
+    - name: openrouter2
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "openrouter_API_KEY2"
+      models:
+        - id: "nvidia/nemotron-3-super-120b-a12b:free"
+          thinking: true
+          stream: true
+    - name: openrouter3
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "openrouter_API_KEY3"
+      models:
+        - id: "nvidia/nemotron-3-super-120b-a12b:free"
           thinking: true
           stream: true

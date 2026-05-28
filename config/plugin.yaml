@@ -14,7 +14,7 @@ plugins:
   mcporter:
     enabled: true
     config_path: "./config/mcporter.json"
-    timeout: 30000
+    timeout: 10000
 
   # WebUI 控制台插件
   webui:

@@ -68,27 +68,39 @@ class MemoryService {
   }
 
   /**
-   * 更新用户偏好
+   * 更新（追加）用户偏好
    * @param {string} content - 新内容
+   * @param {object} options - 选项，如 { overwrite: true }
    */
-  async updateUserProfile(content) {
-    return this.writeFile(this.userProfileFile, content);
+  async updateUserProfile(content, options = {}) {
+    if (options.overwrite) {
+      return this.writeFile(this.userProfileFile, content);
+    }
+    return this.appendFile(this.userProfileFile, content);
   }
 
   /**
-   * 更新知识库
+   * 更新（追加）知识库
    * @param {string} content - 新内容
+   * @param {object} options - 选项，如 { overwrite: true }
    */
-  async updateKnowledge(content) {
-    return this.writeFile(this.knowledgeFile, content);
+  async updateKnowledge(content, options = {}) {
+    if (options.overwrite) {
+      return this.writeFile(this.knowledgeFile, content);
+    }
+    return this.appendFile(this.knowledgeFile, content);
   }
 
   /**
-   * 更新事实信息
+   * 更新（追加）事实信息
    * @param {string} content - 新内容
+   * @param {object} options - 选项，如 { overwrite: true }
    */
-  async updateFacts(content) {
-    return this.writeFile(this.factsFile, content);
+  async updateFacts(content, options = {}) {
+    if (options.overwrite) {
+      return this.writeFile(this.factsFile, content);
+    }
+    return this.appendFile(this.factsFile, content);
   }
 
   /**
@@ -123,7 +135,7 @@ class MemoryService {
   }
 
   /**
-   * 写入文件
+   * 写入文件 (覆盖)
    * @param {string} filename - 文件名
    * @param {string} content - 内容
    */
@@ -135,6 +147,57 @@ class MemoryService {
       return true;
     } catch (error) {
       console.error(`[Memory] Write error (${filename}):`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 追加写入文件
+   * @param {string} filename - 文件名
+   * @param {string} content - 内容
+   */
+  async appendFile(filename, content) {
+    try {
+      if (!content || !content.trim()) {
+        return true;
+      }
+      const filePath = path.join(this.directory, filename);
+      let existingContent = '';
+      try {
+        existingContent = await fs.readFile(filePath, 'utf-8');
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+
+      // 去除首尾空白，并使用正则按行/段落边界进行匹配，避免短文本因部分包含（如子串）导致被误判为已存在
+      const trimmedContent = content.trim();
+      if (trimmedContent) {
+        const escapedContent = trimmedContent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(^|\\n)${escapedContent}(\\n|$)`);
+        if (regex.test(existingContent)) {
+          console.log(`[Memory] Content already exists in ${filename}, skipping append.`);
+          return true;
+        }
+      }
+
+      let newContent = existingContent;
+      if (existingContent.length > 0) {
+        if (!existingContent.endsWith('\n')) {
+          newContent += '\n';
+        }
+        if (!existingContent.endsWith('\n\n')) {
+          newContent += '\n';
+        }
+      }
+      newContent += content;
+
+      await fs.writeFile(filePath, newContent, 'utf-8');
+      console.log(`[Memory] Appended: ${filename}`);
+      return true;
+    } catch (error) {
+      console.error(`[Memory] Append error (${filename}):`, error.message);
       throw error;
     }
   }

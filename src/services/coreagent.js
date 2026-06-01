@@ -166,11 +166,11 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'memory_update_user_profile',
-            description: '更新用户偏好设置',
+            description: '更新（追加）用户偏好设置',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '新的偏好内容' },
+                content: { type: 'string', description: '需要追加的偏好内容' },
               },
               required: ['content'],
             },
@@ -210,11 +210,11 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'memory_update_knowledge',
-            description: '更新长期知识库与经验记录（用于保存有价值的长期信息）',
+            description: '更新（追加）长期知识库与经验记录（用于保存有价值的长期信息）',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '新的知识或经验内容' },
+                content: { type: 'string', description: '需要追加的长期信息（支持 Markdown 格式）' },
               },
               required: ['content'],
             },
@@ -232,11 +232,11 @@ class CoreAgent {
           type: 'function',
           function: {
             name: 'memory_update_facts',
-            description: '更新重要事实记录与关键数据',
+            description: '更新（追加）重要事实记录与关键数据',
             parameters: {
               type: 'object',
               properties: {
-                content: { type: 'string', description: '新的事实或数据内容' },
+                content: { type: 'string', description: '需要追加的事实或关键数据' },
               },
               required: ['content'],
             },

@@ -1,7 +1,14 @@
 {
   "mcpServers": {
-    "ureal-mcp": {
+    "ha-mcp": {
       "enabled": true,
+      "serverUrl": "http://192.168.88.126:8123/api/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwOTUyMDkwMzZmODA0OWIxYmM3YWEwZWZiYzAzZGQ3YyIsImlhdCI6MTc4MDI4MDA3NSwiZXhwIjoyMDk1NjQwMDc1fQ.4oEA_N1wDx8gRhVFyCy1yMXgP6egtKimBz-z5DZ1GGA"
+      }
+    },
+    "ureal-mcp": {
+      "enabled": false,
       "command": "python3",
       "args": [
         "../mcp/ureal-mcp/server.py"

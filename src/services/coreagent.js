@@ -31,10 +31,10 @@ class CoreAgent {
       });
     }
     this.currentPrimaryIndex = 0;
-    
+
     const initPrimary = this.primaryConfigs[0] || {};
     console.log(`[CoreAgent] Initialized with primary model=${initPrimary.model}, baseUrl=${initPrimary.baseUrl}`);
-    
+
     this.client = new OpenAI({
       baseURL: initPrimary.baseUrl || modelConfig.baseUrl,
       apiKey: initPrimary.apiKey || modelConfig.apiKey,
@@ -50,7 +50,7 @@ class CoreAgent {
     if (modelConfig.fallback) {
       this.fallbackConfigs.push(modelConfig.fallback);
     }
-    
+
     if (this.fallbackConfigs.length > 0) {
       console.log(`[CoreAgent] ${this.fallbackConfigs.length} fallback model(s) available.`);
     }
@@ -1072,7 +1072,25 @@ class CoreAgent {
       return { ...result, command: 'context' };
     }
 
-     if (!this._sessions[sessionId]) {
+    // 轮询选择当前主模型（提前初始化，保证在此轮的任何步骤包括自动压缩都能使用到最新的 client/model）
+    if (this.primaryConfigs && this.primaryConfigs.length > 0) {
+      const pConfig = this.primaryConfigs[this.currentPrimaryIndex];
+      this.currentPrimaryIndex = (this.currentPrimaryIndex + 1) % this.primaryConfigs.length;
+
+      this.model = pConfig.model;
+      this.thinking = pConfig.thinking || false;
+      this.stream = pConfig.stream || false;
+
+      this.client = new OpenAI({
+        baseURL: pConfig.baseUrl,
+        apiKey: pConfig.apiKey,
+        timeout: 60000,
+        defaultHeaders: { 'User-Agent': 'curl/8.7.1' },
+      });
+      console.log(`[CoreAgent] Round-robin selected primary model: ${this.model}`);
+    }
+
+    if (!this._sessions[sessionId]) {
       this._sessions[sessionId] = await this._loadSession(sessionId);
     }
 
@@ -1083,7 +1101,50 @@ class CoreAgent {
     const maxLen = this.maxContextTurns * 2;
     // _cleanHistory 先净化历史（去除磁盘上遗留的不完整 tool_call 序列），再裁剪长度
     const cleanedHistory = this._cleanHistory(this._trimHistory(historyCopy, maxLen));
-    const workingHistory = cleanedHistory;
+    let workingHistory = cleanedHistory;
+
+    // 自动会话压缩：如果历史会话条数超过 5 条，仅压缩3条之前的旧消息，最新3条原样保留
+    if (workingHistory.length > 20) {
+      const olderMessages = workingHistory.slice(0, workingHistory.length - 3);
+      const latestFive = workingHistory.slice(-3);
+
+      console.log(`[CoreAgent] workingHistory.length 为 ${workingHistory.length} (> 3)，自动压缩前 ${olderMessages.length} 条旧消息，保留最新 3 条...`);
+
+      // 将旧消息格式化为文本供 LLM 总结
+      const historyText = olderMessages.map(msg => {
+        const roleLabel = msg.role === 'user' ? '用户' :
+          msg.role === 'assistant' ? 'AI' :
+            msg.role === 'tool' ? '工具结果' :
+              msg.role === 'system' ? '系统' : msg.role;
+        let text = `[${roleLabel}]: ${msg.content || ''}`;
+        if (msg.tool_calls) {
+          text += ` (调用了工具: ${msg.tool_calls.map(tc => tc.function?.name).join(', ')})`;
+        }
+        return text;
+      }).join('\n');
+
+      try {
+        const summaryResp = await this.client.chat.completions.create({
+          model: this.model,
+          messages: [
+            { role: 'system', content: '你是一个对话摘要助手，擅长提炼关键信息。' },
+            { role: 'user', content: `请将以下对话历史压缩为一段简洁的摘要，保留关键信息、决策和结果，去除冗余细节。用中文输出，不超过200字。\n\n${historyText}` },
+          ],
+          temperature: 0.3,
+          max_tokens: 300,
+        });
+
+        const summary = summaryResp.choices[0].message.content || '（历史摘要生成失败）';
+        const summaryMsg = { role: 'system', content: `以下是之前对话的摘要：\n${summary}` };
+
+        // 重新拼接：[摘要] + [最新5条]
+        workingHistory = [summaryMsg, ...latestFive];
+        console.log(`[CoreAgent] 自动压缩完成：${olderMessages.length} 条旧消息 → 摘要，保留最新 5 条，workingHistory.length = ${workingHistory.length}`);
+      } catch (compressErr) {
+        console.error(`[CoreAgent] 自动压缩失败: ${compressErr.message}，跳过压缩继续执行`);
+        // 压缩失败时保持原 workingHistory 不变，不影响本轮正常运行
+      }
+    }
 
     let systemPrompt = await this._buildSystemPrompt();
     let ctx = await this._loadMemoryContext();
@@ -1125,23 +1186,6 @@ class CoreAgent {
 
     const tools = await this._getAllTools(options.toolFilter);
     let finalResponse = '';
-
-    if (this.primaryConfigs && this.primaryConfigs.length > 0) {
-      const pConfig = this.primaryConfigs[this.currentPrimaryIndex];
-      this.currentPrimaryIndex = (this.currentPrimaryIndex + 1) % this.primaryConfigs.length;
-      
-      this.model = pConfig.model;
-      this.thinking = pConfig.thinking || false;
-      this.stream = pConfig.stream || false;
-      
-      this.client = new OpenAI({
-        baseURL: pConfig.baseUrl,
-        apiKey: pConfig.apiKey,
-        timeout: 60000,
-        defaultHeaders: { 'User-Agent': 'curl/8.7.1' },
-      });
-      console.log(`[CoreAgent] Round-robin selected primary model: ${this.model}`);
-    }
 
     // 缓存单次决策（决定）循环内的工具调用记录，用于检测和拦截无限重试/死循环
     const executedToolCalls = new Map();
@@ -1191,17 +1235,17 @@ class CoreAgent {
       } catch (error) {
         if (this.fallbackConfigs && this.fallbackConfigs.length > 0) {
           console.warn(`[CoreAgent] Primary model (${this.model}) failed: ${error.message}. Trying fallbacks.`);
-          
+
           let success = false;
           let lastError = error;
-          
+
           for (const fbConfig of this.fallbackConfigs) {
             try {
               console.log(`[CoreAgent] Switching to fallback model: ${fbConfig.model}`);
               this.model = fbConfig.model;
               this.thinking = fbConfig.thinking || false;
               this.stream = fbConfig.stream || false;
-              
+
               this.client = new OpenAI({
                 baseURL: fbConfig.baseUrl,
                 apiKey: fbConfig.apiKey,
@@ -1210,13 +1254,13 @@ class CoreAgent {
                   'User-Agent': 'curl/8.7.1',
                 },
               });
-              
+
               requestOptions.model = this.model;
               requestOptions.temperature = this.thinking ? 1 : 0.7;
 
               const isFallbackStream = options.stream !== undefined ? options.stream : this.stream;
               requestOptions.stream = isFallbackStream;
-              
+
               console.log(`[CoreAgent] Retrying with fallback model: ${this.model}`);
               choice = isFallbackStream
                 ? await this._handleStreamRequest(requestOptions, onChunk, onStream)
@@ -1230,7 +1274,7 @@ class CoreAgent {
                   onStream({ type: 'content', content: choice.content });
                 }
               }
-                
+
               console.log(`[CoreAgent] Fallback to ${this.model} successful. Keeping fallback model for remaining steps.`);
               success = true;
               break; // Stop trying fallbacks
@@ -1239,7 +1283,7 @@ class CoreAgent {
               lastError = fbError;
             }
           }
-          
+
           if (!success) {
             throw lastError;
           }

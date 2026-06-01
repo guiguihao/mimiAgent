@@ -38,10 +38,7 @@ memory:
 # 模型配置 
 models:
   default:
-    - openrouter/nvidia/nemotron-3-super-120b-a12b:free
-    - openrouter1/nvidia/nemotron-3-super-120b-a12b:free
-    - openrouter2/nvidia/nemotron-3-super-120b-a12b:free
-    - openrouter3/nvidia/nemotron-3-super-120b-a12b:free
+    - "nvidia/openai/gpt-oss-120b"
   fallback: "nvidia/openai/gpt-oss-120b"
   providers:
     - name: nvidia
